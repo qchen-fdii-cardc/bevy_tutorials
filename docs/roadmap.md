@@ -1,4 +1,4 @@
-```{include} ../bevy-learning-roadmap.md
+```{include} ./bevy-learning-roadmap.md
 :parser: myst_parser.sphinx_
 ```
 
