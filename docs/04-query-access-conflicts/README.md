@@ -96,6 +96,8 @@ fn transfer_health(
 - [Bevy `0.19.1`：访问冲突](https://docs.rs/bevy/0.19.1/bevy/ecs/query/struct.QueryFilter.html)
 - [Bevy 官方 ECS 示例](https://bevy.org/examples/ecs-entity-component-system/)
 
+<a id="rust-in-bevy"></a>
+
 ```{include} Rust_in_Bevy.md
 :heading-offset: 1
 ```
