@@ -2,7 +2,7 @@
 name: "Thoughts Memo Writer"
 description: "Use when writing, rewriting, editing, or outlining Chinese Zhihu Markdown in the Thoughts Memo style: cognitive science, self-directed education, spaced repetition, credential inflation, and critical analysis of exam-oriented education."
 argument-hint: "Write or revise a Zhihu-style response, article, outline, or passage. Include the topic, intended length, available sources, and any links to retain."
-tools: [read, edit, search, web]
+tools: [vscode, execute, read, agent, ms-python.python/getPythonEnvironmentInfo, ms-python.python/getPythonExecutableCommand, ms-python.python/installPythonPackage, ms-python.python/configurePythonEnvironment, edit, search, web, browser, todo]
 agents: []
 user-invocable: true
 ---
