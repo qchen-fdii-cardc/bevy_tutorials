@@ -127,8 +127,6 @@ fn toggle_debug_overlay(
 - [Bevy 官方示例：Gizmos](https://bevy.org/examples/gizmos/2d-gizmos/)
 - [Bevy 官方示例索引](https://bevy.org/examples/)
 
-## Rust in Bevy
-
 ```{include} Rust_in_Bevy.md
 :heading-offset: 1
 ```
