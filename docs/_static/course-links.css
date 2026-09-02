@@ -1,0 +1,41 @@
+.chapter-link-grid {
+  border-top: 1px solid var(--color-background-border);
+  margin: 1.25rem 0 2rem;
+}
+
+.chapter-link-row {
+  align-items: center;
+  border-bottom: 1px solid var(--color-background-border);
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: 5.5rem minmax(0, 1fr) max-content;
+  padding: 0.7rem 0.25rem;
+}
+
+.chapter-link-phase {
+  color: var(--color-foreground-muted);
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.chapter-link-rust {
+  border-left: 1px solid var(--color-background-border);
+  font-size: 0.9rem;
+  padding-left: 0.75rem;
+  white-space: nowrap;
+}
+
+.chapter-link-stage {
+  background: var(--color-background-secondary);
+}
+
+@media (max-width: 42rem) {
+  .chapter-link-row {
+    align-items: start;
+    grid-template-columns: 1fr max-content;
+  }
+
+  .chapter-link-phase {
+    grid-column: 1 / -1;
+  }
+}

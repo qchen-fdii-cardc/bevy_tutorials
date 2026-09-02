@@ -133,6 +133,8 @@ fn advance_runtime(time: Res<Time>, mut stats: ResMut<RuntimeStats>)
 - [Bevy 官方示例：Gizmos](https://bevy.org/examples/gizmos/2d-gizmos/)
 - [Bevy 迁移指南](https://bevy.org/learn/migration-guides/)
 
+<a id="rust-in-bevy"></a>
+
 ```{include} Rust_in_Bevy.md
 :heading-offset: 1
 ```

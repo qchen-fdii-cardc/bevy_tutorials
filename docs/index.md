@@ -5,6 +5,7 @@
 ```{toctree}
 :maxdepth: 1
 :caption: 学习路径
+:hidden:
 
 roadmap
 00-app-runtime/README
@@ -16,6 +17,41 @@ stages/stage-00-observability/README
 capstone
 contributing
 ```
+
+## 课程章节
+
+<div class="chapter-link-grid">
+	<div class="chapter-link-row">
+		<span class="chapter-link-phase">阶段 0</span>
+		<a href="00-app-runtime/README.html">教程 00：App 运行时</a>
+		<a class="chapter-link-rust" href="00-app-runtime/README.html#rust-in-bevy">Rust in Bevy</a>
+	</div>
+	<div class="chapter-link-row">
+		<span class="chapter-link-phase">阶段 0</span>
+		<a href="01-plugins-resources-systems/README.html">教程 01：插件、资源与系统</a>
+		<a class="chapter-link-rust" href="01-plugins-resources-systems/README.html#rust-in-bevy">Rust in Bevy</a>
+	</div>
+	<div class="chapter-link-row">
+		<span class="chapter-link-phase">阶段 0</span>
+		<a href="02-debug-visualization/README.html">教程 02：调试可视化</a>
+		<a class="chapter-link-rust" href="02-debug-visualization/README.html#rust-in-bevy">Rust in Bevy</a>
+	</div>
+	<div class="chapter-link-row chapter-link-stage">
+		<span class="chapter-link-phase">阶段实践</span>
+		<a href="stages/stage-00-observability/README.html">阶段 0：可观测的运行时</a>
+		<a class="chapter-link-rust" href="stages/stage-00-observability/README.html#rust-in-bevy">Rust in Bevy</a>
+	</div>
+	<div class="chapter-link-row">
+		<span class="chapter-link-phase">阶段 1</span>
+		<a href="03-ecs-data-model/README.html">教程 03：ECS 数据模型</a>
+		<a class="chapter-link-rust" href="03-ecs-data-model/README.html#rust-in-bevy">Rust in Bevy</a>
+	</div>
+	<div class="chapter-link-row">
+		<span class="chapter-link-phase">阶段 1</span>
+		<a href="04-query-access-conflicts/README.html">教程 04：Query 访问冲突</a>
+		<a class="chapter-link-rust" href="04-query-access-conflicts/README.html#rust-in-bevy">Rust in Bevy</a>
+	</div>
+</div>
 
 ## 当前基线
 

@@ -69,6 +69,8 @@ bevy = { version = "0.19.1", default-features = false, features = ["default_app"
 - [Bevy `0.19.1`：Gizmos](https://docs.rs/bevy/0.19.1/bevy/gizmos/struct.Gizmos.html)
 - [Bevy 官方示例索引](https://bevy.org/examples/)
 
+<a id="rust-in-bevy"></a>
+
 ```{include} Rust_in_Bevy.md
 :heading-offset: 1
 ```
