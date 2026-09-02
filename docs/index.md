@@ -3,8 +3,8 @@
 「能运行一个窗口」只证明平台和依赖链暂时没有报错。学习 Bevy 的目标是把玩法压缩为可验证的状态、数据流与调度关系。
 
 ```{toctree}
-:maxdepth: 2
-:caption: 路线图
+:maxdepth: 1
+:caption: 学习路径
 
 roadmap
 00-app-runtime/README
