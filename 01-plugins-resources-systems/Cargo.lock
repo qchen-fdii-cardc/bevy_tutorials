@@ -349,7 +349,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "bevy-chapter-00-app-runtime"
+name = "bevy-chapter-01-plugins-resources-systems"
 version = "0.1.0"
 dependencies = [
  "bevy",

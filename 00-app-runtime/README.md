@@ -28,6 +28,16 @@ cargo clippy --all-targets -- -D warnings
 cargo check
 ```
 
+## 依赖配置
+
+本章没有使用 `bevy = "0.19.1"` 的完整默认 feature 集，而是固定为：
+
+```toml
+bevy = { version = "0.19.1", default-features = false, features = ["default_app", "default_platform", "2d_bevy_render"] }
+```
+
+`default_app` 提供 `App`、日志、资产与状态等基础运行时；`default_platform` 提供窗口、键盘和平台事件循环；`2d_bevy_render` 提供 `Camera2d`、2D 渲染与 Gizmos。本章不使用 3D PBR、GLTF、UI、音频、场景序列化或 picking，因此不编译它们。仓库根目录的 `.cargo/config.toml` 将所有独立章节的构建工件放在共享 `target` 目录，后续章节复用相同 feature 集的依赖缓存。
+
 ## 先把运行时拆开
 
 任何可运行的 Bevy 程序都可以先压缩成下面这张图：

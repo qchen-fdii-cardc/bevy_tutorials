@@ -29,9 +29,19 @@ cargo test
 cargo run
 ```
 
+## 依赖配置
+
+本章使用显式的最小 2D feature 集：
+
+```toml
+bevy = { version = "0.19.1", default-features = false, features = ["default_app", "default_platform", "2d_bevy_render"] }
+```
+
+日志、`ButtonInput<KeyCode>`、`Camera2d`、`Transform` 和 Gizmos 分别由这三个 feature 分支提供。本实验没有精灵资产、3D PBR、GLTF、UI、音频、场景序列化或 picking；完整默认 feature 只会将这些未使用模块加入编译图。根目录的共享 `target` 目录使后续同配置章节复用 Bevy 工件。
+
 ## 先问：你要证明什么
 
-调试失败常常不是因为工具不够，而是问题没有被压缩成可证伪的判断。本章只验证三件事：系统是否运行，状态是否更新，空间中的实体是否符合预期。
+调试失败常常源于问题没有被压缩成可证伪的判断。工具数量解决不了这个问题。本章只验证三件事：系统是否运行，状态是否更新，空间中的实体是否符合预期。
 
 | 要验证的判断 | 证据 | 本章工具 |
 | --- | --- | --- |

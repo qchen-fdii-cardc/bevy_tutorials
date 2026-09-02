@@ -29,6 +29,16 @@ cargo test
 cargo run
 ```
 
+## 依赖配置
+
+本章沿用第 00 章的最小 2D 运行时配置：
+
+```toml
+bevy = { version = "0.19.1", default-features = false, features = ["default_app", "default_platform", "2d_bevy_render"] }
+```
+
+`RuntimeDiagnosticsPlugin` 需要窗口、键盘、2D 相机、结构化日志和 Gizmos；这些 feature 已完整覆盖。它不需要 3D、GLTF、UI、音频、场景序列化或 picking。依赖选择应跟随实际的 Component、System 和渲染接口，别让一个调试圆环拖进整套游戏引擎。
+
 ## 主函数只做装配
 
 本章的主函数刻意短到近乎无聊：
