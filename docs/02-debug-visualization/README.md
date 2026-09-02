@@ -123,3 +123,9 @@ Bug 仍能在这里复现，根因就在输入、状态、调度或坐标模型�
 - [Bevy 官方示例：2D Gizmos](https://bevy.org/examples/gizmos/2d-gizmos/)
 - [Bevy 官方示例：ECS](https://bevy.org/examples/ecs-entity-component-system/)
 - [Bevy 官方文档](https://bevy.org/learn/)
+
+## Rust in Bevy
+
+```{include} Rust_in_Bevy.md
+:heading-offset: 1
+```

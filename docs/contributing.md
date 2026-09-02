@@ -12,7 +12,7 @@
 本地构建文档站：
 
 ```powershell
-.\.venv\Scripts\python.exe docs\build.py
+docs\.venv\Scripts\python.exe docs\build.py
 ```
 
 生成的网站在 `docs/_build/html/index.html`。发布后，源代码也位于站点根目录的对应 Cargo 目录，可从教程页面的源码链接直接打开。

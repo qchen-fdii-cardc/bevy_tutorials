@@ -95,3 +95,9 @@ fn move_entities(
 - [Bevy `0.19.1`：Component](https://docs.rs/bevy/0.19.1/bevy/ecs/component/trait.Component.html)
 - [Bevy `0.19.1`：Query](https://docs.rs/bevy/0.19.1/bevy/ecs/system/struct.Query.html)
 - [Bevy 官方 ECS 示例](https://bevy.org/examples/ecs-entity-component-system/)
+
+## Rust in Bevy
+
+```{include} Rust_in_Bevy.md
+:heading-offset: 1
+```

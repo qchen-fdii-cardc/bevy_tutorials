@@ -7,9 +7,13 @@
 :caption: 路线图
 
 roadmap
-bevy/index
-rust/index
-stages/index
+00-app-runtime/README
+01-plugins-resources-systems/README
+02-debug-visualization/README
+stages/stage-00-observability/README
+03-ecs-data-model/README
+04-query-access-conflicts/README
+capstone
 contributing
 ```
 
@@ -17,7 +21,7 @@ contributing
 
 - Rust stable 与 Cargo
 - Bevy `0.19.1`
-- 每个章节都是可独立运行的 Cargo crate
-- 每个章节都有对应的 Rust 语言构造与设计技术说明
+- 每个章节目录都是可独立运行的 Cargo crate
+- 每个章节的 README 同时呈现 Bevy 机制与对应的 Rust 设计说明
 
-站点发布时会一并复制所有章节和阶段实验的 Cargo 源码。教程页中的源码链接可直接打开发布版本的 `src/main.rs`、`Cargo.toml` 和配套 Markdown。
+阶段实验插入在其对应阶段的最后一篇文章之后。站点发布时会一并复制每个目录的 Cargo 源码，因此 README 中的 `src/main.rs` 链接可直接打开发布版本源码。
