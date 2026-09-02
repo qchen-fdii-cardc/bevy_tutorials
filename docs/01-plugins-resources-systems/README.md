@@ -126,3 +126,9 @@ fn toggle_debug_overlay(
 - [Bevy `0.19.1`：`Resource`](https://docs.rs/bevy/0.19.1/bevy/ecs/resource/trait.Resource.html)
 - [Bevy 官方示例：Gizmos](https://bevy.org/examples/gizmos/2d-gizmos/)
 - [Bevy 官方示例索引](https://bevy.org/examples/)
+
+## Rust in Bevy
+
+```{include} Rust_in_Bevy.md
+:heading-offset: 1
+```
