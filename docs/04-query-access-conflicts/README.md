@@ -21,6 +21,10 @@ cargo test
 
 程序创建一个生命值为 `8` 的玩家与生命值为 `5` 的敌人。一次更新后，玩家被治疗到 `10`，敌人受伤到 `2`，并输出两条状态日志。
 
+## 项目与源码
+
+<a href="https://github.com/qchen-fdii-cardc/bevy_tutorials">GitHub 仓库</a> · <a href="Cargo.toml">查看 <code>Cargo.toml</code></a> · <a href="src/main.rs">查看 <code>src/main.rs</code></a> · <a href="Rust_in_Bevy.md">查看 <code>Rust_in_Bevy.md</code></a>
+
 ## 依赖配置
 
 本章和第 03 章一样是纯 ECS 实验：

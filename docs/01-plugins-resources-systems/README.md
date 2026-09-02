@@ -29,6 +29,10 @@ cargo test
 cargo run
 ```
 
+## 项目与源码
+
+<a href="https://github.com/qchen-fdii-cardc/bevy_tutorials">GitHub 仓库</a> · <a href="Cargo.toml">查看 <code>Cargo.toml</code></a> · <a href="src/main.rs">查看 <code>src/main.rs</code></a> · <a href="Rust_in_Bevy.md">查看 <code>Rust_in_Bevy.md</code></a>
+
 ## 依赖配置
 
 本章沿用第 00 章的最小 2D 运行时配置：

@@ -27,6 +27,10 @@ cargo run
 3. 按 `D`，文本覆盖层消失或恢复，坐标轴与探针仍继续绘制。
 4. 观察终端每秒的 `Observable runtime state` 和 `Overlay metrics refreshed` 记录。
 
+## 项目与源码
+
+<a href="https://github.com/qchen-fdii-cardc/bevy_tutorials">GitHub 仓库</a> · <a href="Cargo.toml">查看 <code>Cargo.toml</code></a> · <a href="src/main.rs">查看 <code>src/main.rs</code></a> · <a href="Rust_in_Bevy.md">查看 <code>Rust_in_Bevy.md</code></a>
+
 ## 问题模型
 
 | 状态 | 归属 | 写入者 | 观察者 |

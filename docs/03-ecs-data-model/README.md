@@ -21,6 +21,10 @@ cargo test
 
 程序不创建窗口。它在内存中生成玩家和敌人，推进一次模拟，然后打印各自位置。这个刻意贫瘠的实验删除了渲染、输入和时间，留下 ECS 的因果链。
 
+## 项目与源码
+
+<a href="https://github.com/qchen-fdii-cardc/bevy_tutorials">GitHub 仓库</a> · <a href="Cargo.toml">查看 <code>Cargo.toml</code></a> · <a href="src/main.rs">查看 <code>src/main.rs</code></a> · <a href="Rust_in_Bevy.md">查看 <code>Rust_in_Bevy.md</code></a>
+
 ## 依赖配置
 
 本章是纯 ECS 实验，依赖配置因此更小：
