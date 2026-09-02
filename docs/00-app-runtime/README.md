@@ -28,6 +28,10 @@ cargo clippy --all-targets -- -D warnings
 cargo check
 ```
 
+## 项目与源码
+
+<a href="https://github.com/qchen-fdii-cardc/bevy_tutorials">GitHub 仓库</a> · <a href="Cargo.toml">查看 <code>Cargo.toml</code></a> · <a href="src/main.rs">查看 <code>src/main.rs</code></a> · <a href="Rust_in_Bevy.md">查看 <code>Rust_in_Bevy.md</code></a>
+
 ## 依赖配置
 
 本章没有使用 `bevy = "0.19.1"` 的完整默认 feature 集，而是固定为：

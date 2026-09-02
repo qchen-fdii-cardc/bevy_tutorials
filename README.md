@@ -18,6 +18,10 @@ cargo run
 docs\.venv\Scripts\python.exe docs\build.py
 ```
 
+## 项目与源码
+
+<a href="https://github.com/qchen-fdii-cardc/bevy_tutorials">GitHub 仓库</a> · <a href="Cargo.toml">查看 <code>Cargo.toml</code></a> · <a href="src/main.rs">查看 <code>src/main.rs</code></a> · <a href="https://www.windtunnel.cn/bevy_tutorials/">在线文档</a>
+
 ## 目录边界
 
 - `docs/00-*`、`docs/01-*`：按文章编号组织的学习章节。
