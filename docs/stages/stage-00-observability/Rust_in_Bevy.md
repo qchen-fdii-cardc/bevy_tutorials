@@ -1,50 +1,96 @@
-# Rust in Bevy 阶段 0：派生状态、格式化与 UI 数据流
+# Rust in Bevy：Observability：先设计可观测性，再做更多逻辑
 
-「把 FPS 文本塞进全局变量」只是在复制状态。覆盖层应从可审计的 Resource 和 Query 派生，它才能和实际 World 保持一致。
-
-## Rust 地图
+## 本章 Rust 地图
 
 | Bevy 表面 | Rust 构造 | 设计含义 |
 | --- | --- | --- |
-| `RuntimeStats` | `struct` 与 `Default` trait | 集中管理唯一运行时采样状态 |
-| `Query<&mut Text, With<OverlayText>>` | 可变借用与 marker type | 仅授予 UI 文本的最小写权限 |
-| `format!(...)` | 格式化 macro | 从数值状态生成显示文本 |
-| `Visibility` match | 穷尽模式匹配 | 明确表达显示状态转换 |
-| `Commands` | 延迟命令缓冲 | 遍历期间安全排队新增实体 |
+| `App` | `App::new()` | 把世界、资源和系统联系成一个运行时 |
+| `Plugin` | `impl Plugin for ...` | 把逻辑以模块形式注册 |
+| `Component` | `#[derive(Component)]` | 表达一个实体上的事实 |
+| `Resource` | `#[derive(Resource)]` | 表达全局共享状态 |
+| `System` | `fn` + 参数列表 | 表示输入、输出和状态变换 |
+| `Event` | `struct + Event` | 记录发生过什么 |
+| `State` | `enum + init_state` | 表达当前阶段 |
 
-## 派生状态不应拥有第二个真相源
+## 核心思想
 
-```rust
-text.0 = format!("fps: {:>5.0}", stats.frames_per_second);
-```
+介绍为什么在一个游戏项目的早期阶段，日志、状态和可视化比某些炫技更重要。
 
-UI 文本是 `RuntimeStats` 的派生表现，不是独立游戏状态。系统每帧从 Resource 读取数值，再写入 `Text` Component。这样即使 UI 被隐藏，采样仍继续；UI 恢复时无需同步两份 FPS 数据。
+这意味着用 Rust 编写 Bevy 程序时，最重要的不是“语法能不能写”，而是你是否明确了状态归属。Bevy 的系统参数本身就是一份设计文档：它告诉你这条系统读取什么、写什么、依赖什么。
 
-Rust 的所有权模型鼓励这种单一真相源：拥有状态的 Resource 管理值，读取者借用它，表现层只保存可重建结果。
+在真实工程里，最容易出现的问题通常不是编译失败，而是语义混乱。比如把“输入事件、状态机、显示反馈”全塞进一个结构体，最后系统很难维护；或者让同一个系统同时诉诸多个资源，造成调度顺序变成隐形 bug。
 
-## `match` 让状态转换完整可见
+## Rust 里要怎么想
 
-```rust
-*visibility = match *visibility {
-    Visibility::Hidden => Visibility::Inherited,
-    _ => Visibility::Hidden,
-};
-```
+一套好的 ECS 代码通常遵守下面几个原则：
 
-模式匹配把隐藏状态和其他可见状态的转换集中在一个表达式中。若未来需要区分 `Visible`、`Inherited` 与 `Hidden`，应写出每条规则，而不是让布尔变量在多个系统中漂移。
+- 一个组件只表达一个事实，不把“状态 + 行为 + 反馈”混在一起；
+- 资源承载共享状态，且仅在真正需要的系统里使用；
+- 一个 System 明确说明输入与输出，尽量避免隐式副作用；
+- 事件和状态用在不同层次：事件记录事实，状态记录阶段；
+- 调度顺序的设计要被视为程序逻辑的一部分。
 
-## 格式化与类型检查
+这些规则看似抽象，但它们直接影响你后面写测试、调试、扩展和 refactor 的成本。
 
-`format!` 在编译时检查格式字符串和参数类型。`{:>5.2}` 指定右对齐、最小宽度与两位小数；它让帧时间在数值波动时保持列对齐，调试读数不随内容跳动。
+## 关键机制
 
-不要在热路径中用格式化文本参与游戏规则。这里每帧创建字符串只服务于开发期调试 UI；性能敏感的运行期界面应按测量结果设计更新频率。
+1. 可观测性让你知道“世界到底发生了什么”。
+
+2. 日志、资源观测和时间线是调试最重要的入口。
+
+3. 在制造更多系统之前，先定义状态模型。
+
+4. 项目状态是讲清楚设计的前提。
+
+## 典型误区
+
+1. 把多个事实压进一个结构体；
+2. 在一个系统里同时写状态和读取状态；
+3. 把状态机和事件流混成一团；
+4. 只看输出，不验证世界中的数据；
+5. 把 UI 或视觉层当成“真实状态”来源。
 
 ## 小练习
 
-为 `RuntimeStats` 添加 `fn should_report(&self) -> bool`，将「整秒采样完成」的判断封装成纯方法。再为它写普通单元测试，验证时间从 `0.99` 增至 `1.01` 时只触发一次报告。
+1. 把一个“万能对象”拆成多个 `Component`，并说明每个组件对应哪条事实。
+2. 选择一个关键状态，写一条测试断言它在 `App::update()` 后发生了哪种变化。
+3. 把一个混合逻辑拆成两个 System：一个负责收集输入，另一个负责写回状态。
+4. 试着把这节课的关键状态判断写成英语问题：what changed, where, and why？
+
+## 一句总结
+
+Bevy 不是让你在图像和代码之间疯狂试探，而是让你用 Rust 的类型系统和 ECS 的边界学会说明“这个状态为什么存在”。当你清楚这个问题时，后面的调试、扩展和测试都不再靠运气。
 
 ## 延伸阅读
 
-- [Rust Book：结构体](https://doc.rust-lang.org/book/ch05-01-defining-structs.html)
-- [Rust Book：模式与匹配](https://doc.rust-lang.org/book/ch19-00-patterns.html)
-- [Rust 文档：`format!`](https://doc.rust-lang.org/std/macro.format.html)
+- [Rust Book](https://doc.rust-lang.org/book/)
+- [Rust by Example](https://doc.rust-lang.org/rust-by-example/)
+- [Bevy 官方文档](https://bevy.org/learn/)
+- [Bevy API Docs](https://docs.rs/bevy/0.19.1/bevy/)
+
+
+## 典型误区
+
+1. 把多个事实压进一个结构体；
+2. 在一个系统里同时写状态和读取状态；
+3. 把状态机和事件流混成一团；
+4. 只看输出，不验证世界中的数据；
+5. 把 UI 或视觉层当成“真实状态”来源。
+
+## 小练习
+
+1. 把一个“万能对象”拆成多个 `Component`，并说明每个组件对应哪条事实。
+2. 选择一个关键状态，写一条测试断言它在 `App::update()` 后发生了哪种变化。
+3. 把一个混合逻辑拆成两个 System：一个负责收集输入，另一个负责写回状态。
+4. 试着把这节课的关键状态判断写成英语问题：what changed, where, and why？
+
+## 一句总结
+
+Bevy 不是让你在图像和代码之间疯狂试探，而是让你用 Rust 的类型系统和 ECS 的边界学会说明“这个状态为什么存在”。当你清楚这个问题时，后面的调试、扩展和测试都不再靠运气。
+
+## 延伸阅读
+
+- [Rust Book](https://doc.rust-lang.org/book/)
+- [Rust by Example](https://doc.rust-lang.org/rust-by-example/)
+- [Bevy 官方文档](https://bevy.org/learn/)
+- [Bevy API Docs](https://docs.rs/bevy/0.19.1/bevy/)
