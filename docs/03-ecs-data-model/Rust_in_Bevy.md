@@ -1,50 +1,96 @@
-# Rust in Bevy 03：组合数据、Newtype 与可测试规则
-
-「ECS 放弃对象」不等于放弃建模。它要求你用小类型和组合来表达模型，而不是把变化原因绑死在一个巨型 struct 中。
+# Rust in Bevy：ECS Data Model：把事实拆成 Component 与 Entity
 
 ## 本章 Rust 地图
 
 | Bevy 表面 | Rust 构造 | 设计含义 |
 | --- | --- | --- |
-| `struct Position(Vec2)` | Newtype pattern | 为坐标赋予位置语义，避免裸 `Vec2` 混用 |
-| `struct Player;` | 零大小 marker type | 用类型表达阵营或角色分类 |
-| `Query<(&mut Position, &Velocity)>` | 元组、可变借用与解构 | 只给规则需要的最小数据集合 |
-| `#[derive(Component)]` | derive macro | 将普通 Rust 数据纳入 World 存储 |
-| `#[cfg(test)]` | 条件编译 | 测试代码不进入发布构建 |
+| `App` | `App::new()` | 把世界、资源和系统联系成一个运行时 |
+| `Plugin` | `impl Plugin for ...` | 把逻辑以模块形式注册 |
+| `Component` | `#[derive(Component)]` | 表达一个实体上的事实 |
+| `Resource` | `#[derive(Resource)]` | 表达全局共享状态 |
+| `System` | `fn` + 参数列表 | 表示输入、输出和状态变换 |
+| `Event` | `struct + Event` | 记录发生过什么 |
+| `State` | `enum + init_state` | 表达当前阶段 |
 
-## Newtype 防止语义漂移
+## 核心思想
 
-`Position(Vec2)` 与 `Velocity(Vec2)` 的底层数据都是 `Vec2`，语义却完全不同。若函数直接接受两个 `Vec2`，参数位置写反仍可能编译；newtype 让这种错误在类型检查阶段暴露。
+讲述实体、组件、世界的关系，以及为什么“一个函数里塞很多字段”不如“按事实分散”。
 
-```rust
-struct Position(Vec2);
-struct Velocity(Vec2);
-```
+这意味着用 Rust 编写 Bevy 程序时，最重要的不是“语法能不能写”，而是你是否明确了状态归属。Bevy 的系统参数本身就是一份设计文档：它告诉你这条系统读取什么、写什么、依赖什么。
 
-这是一项廉价的领域建模技术。为真实不同的概念建立不同类型，别让「恰好都是两个 f32」替代语义。
+在真实工程里，最容易出现的问题通常不是编译失败，而是语义混乱。比如把“输入事件、状态机、显示反馈”全塞进一个结构体，最后系统很难维护；或者让同一个系统同时诉诸多个资源，造成调度顺序变成隐形 bug。
 
-## 元组查询是局部组合
+## Rust 里要怎么想
 
-`Query<(&mut Position, &Velocity)>` 并没有创建临时「可移动对象」。它对每个匹配实体借出两个字段，并通过元组解构交给 System。规则只看见位置和速度，因此不会意外依赖名称、阵营或生命值。
+一套好的 ECS 代码通常遵守下面几个原则：
 
-这种参数级组合比在 `Player` 上堆方法更稳健：投射物加入同样两个 Component 后，自动复用移动规则。
+- 一个组件只表达一个事实，不把“状态 + 行为 + 反馈”混在一起；
+- 资源承载共享状态，且仅在真正需要的系统里使用；
+- 一个 System 明确说明输入与输出，尽量避免隐式副作用；
+- 事件和状态用在不同层次：事件记录事实，状态记录阶段；
+- 调度顺序的设计要被视为程序逻辑的一部分。
 
-## 测试依赖状态，而非画面
+这些规则看似抽象，但它们直接影响你后面写测试、调试、扩展和 refactor 的成本。
 
-```rust
-assert_eq!(app.world().get::<Position>(moving_entity).unwrap().0, Vec2::new(6.0, 2.0));
-```
+## 关键机制
 
-测试直接构建输入 World，执行一次更新，断言输出 World。它没有启动窗口，也不关心渲染帧率。这正是 Rust 测试的优势：将规则写成可注入依赖的纯数据变换，测试速度和错误定位都会改善。
+1. 实体是身份，组件是事实。
 
-`#[cfg(test)]` 让测试模块只在 `cargo test` 构建，避免示例二进制携带仅用于断言的代码。
+2. 尽量让每个组件表达单一事实，而不是打包复合状态。
+
+3. 世界是所有实体与共享资源的集合。
+
+4. ECS 的力量来自组合，而不是继承。
+
+## 典型误区
+
+1. 把多个事实压进一个结构体；
+2. 在一个系统里同时写状态和读取状态；
+3. 把状态机和事件流混成一团；
+4. 只看输出，不验证世界中的数据；
+5. 把 UI 或视觉层当成“真实状态”来源。
 
 ## 小练习
 
-为 `Health(u32)` 添加 `fn is_dead(&self) -> bool`。不要在它内部 despawn 实体：该方法只负责局部事实判断，生命周期副作用仍由 System 与 `Commands` 协调。
+1. 把一个“万能对象”拆成多个 `Component`，并说明每个组件对应哪条事实。
+2. 选择一个关键状态，写一条测试断言它在 `App::update()` 后发生了哪种变化。
+3. 把一个混合逻辑拆成两个 System：一个负责收集输入，另一个负责写回状态。
+4. 试着把这节课的关键状态判断写成英语问题：what changed, where, and why？
+
+## 一句总结
+
+Bevy 不是让你在图像和代码之间疯狂试探，而是让你用 Rust 的类型系统和 ECS 的边界学会说明“这个状态为什么存在”。当你清楚这个问题时，后面的调试、扩展和测试都不再靠运气。
 
 ## 延伸阅读
 
-- [Rust API Guidelines：Newtype](https://rust-lang.github.io/api-guidelines/type-safety.html)
-- [Rust Book：测试](https://doc.rust-lang.org/book/ch11-00-testing.html)
-- [Rust Reference：条件编译](https://doc.rust-lang.org/reference/conditional-compilation.html)
+- [Rust Book](https://doc.rust-lang.org/book/)
+- [Rust by Example](https://doc.rust-lang.org/rust-by-example/)
+- [Bevy 官方文档](https://bevy.org/learn/)
+- [Bevy API Docs](https://docs.rs/bevy/0.19.1/bevy/)
+
+
+## 典型误区
+
+1. 把多个事实压进一个结构体；
+2. 在一个系统里同时写状态和读取状态；
+3. 把状态机和事件流混成一团；
+4. 只看输出，不验证世界中的数据；
+5. 把 UI 或视觉层当成“真实状态”来源。
+
+## 小练习
+
+1. 把一个“万能对象”拆成多个 `Component`，并说明每个组件对应哪条事实。
+2. 选择一个关键状态，写一条测试断言它在 `App::update()` 后发生了哪种变化。
+3. 把一个混合逻辑拆成两个 System：一个负责收集输入，另一个负责写回状态。
+4. 试着把这节课的关键状态判断写成英语问题：what changed, where, and why？
+
+## 一句总结
+
+Bevy 不是让你在图像和代码之间疯狂试探，而是让你用 Rust 的类型系统和 ECS 的边界学会说明“这个状态为什么存在”。当你清楚这个问题时，后面的调试、扩展和测试都不再靠运气。
+
+## 延伸阅读
+
+- [Rust Book](https://doc.rust-lang.org/book/)
+- [Rust by Example](https://doc.rust-lang.org/rust-by-example/)
+- [Bevy 官方文档](https://bevy.org/learn/)
+- [Bevy API Docs](https://docs.rs/bevy/0.19.1/bevy/)
