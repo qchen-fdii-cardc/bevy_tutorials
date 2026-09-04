@@ -10,6 +10,12 @@ DOCS_ROOT = Path(__file__).resolve().parent
 CAPSTONE_ROOT = DOCS_ROOT.parent
 OUTPUT_ROOT = DOCS_ROOT / "_build" / "html"
 CHAPTER_DIRECTORIES = [
+    "00-app-runtime",
+    "01-plugins-resources-systems",
+    "02-debug-visualization",
+    "03-ecs-data-model",
+    "04-query-access-conflicts",
+    "05-commands-lifecycle",
     "06-events-change-detection",
     "07-fixed-update",
     "08-input-mapping",
@@ -29,12 +35,6 @@ CHAPTER_DIRECTORIES = [
     "22-testing-ecs-logic",
     "23-performance-profiling",
     "24-save-settings-release",
-    "05-commands-lifecycle",
-    "00-app-runtime",
-    "01-plugins-resources-systems",
-    "02-debug-visualization",
-    "03-ecs-data-model",
-    "04-query-access-conflicts",
 ]
 
 

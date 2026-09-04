@@ -4,4 +4,6 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-bevy = { version = "0.19.1", default-features = false, features = ["default_app", "default_platform", "2d_bevy_render"] }
+bevy = "0.19.1"
+rand = "0.9"
+image = "0.25"

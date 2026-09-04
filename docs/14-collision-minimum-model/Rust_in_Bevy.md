@@ -1,96 +1,130 @@
 # Rust in Bevy：Collision Minimum Model：先做最小但正确的碰撞事实
 
-## 本章 Rust 地图
+## 对应代码
 
-| Bevy 表面 | Rust 构造 | 设计含义 |
-| --- | --- | --- |
-| `App` | `App::new()` | 把世界、资源和系统联系成一个运行时 |
-| `Plugin` | `impl Plugin for ...` | 把逻辑以模块形式注册 |
-| `Component` | `#[derive(Component)]` | 表达一个实体上的事实 |
-| `Resource` | `#[derive(Resource)]` | 表达全局共享状态 |
-| `System` | `fn` + 参数列表 | 表示输入、输出和状态变换 |
-| `Event` | `struct + Event` | 记录发生过什么 |
-| `State` | `enum + init_state` | 表达当前阶段 |
+下面这段来自根项目的实际实现：它不是“概念说明”，而是 `GameState`、`Query`、`ResMut` 和 `FixedUpdate` 在真实代码里如何协作。
 
-## 核心思想
+```rust
+#[derive(States, Default, Debug, Clone, Eq, PartialEq, Hash)]
+enum GameState {
+    #[default]
+    Menu,
+    Playing,
+    GameOver,
+}
 
-建立最小碰撞模型，说明碰撞不是一条代码，而是多个事实：位置、半径、触发状态和分层。
+fn apply_game_state(
+    state: Res<State<GameState>>,
+    mut next_state: ResMut<NextState<GameState>>,
+    session: Res<GameSession>,
+    keyboard: Res<ButtonInput<KeyCode>>,
+) {
+    if *state.get() == GameState::Playing && session.health <= 0 {
+        next_state.set(GameState::GameOver);
+    }
 
-这意味着用 Rust 编写 Bevy 程序时，最重要的不是“语法能不能写”，而是你是否明确了状态归属。Bevy 的系统参数本身就是一份设计文档：它告诉你这条系统读取什么、写什么、依赖什么。
+    if keyboard.just_pressed(KeyCode::Escape) {
+        next_state.set(GameState::Menu);
+    }
+}
 
-在真实工程里，最容易出现的问题通常不是编译失败，而是语义混乱。比如把“输入事件、状态机、显示反馈”全塞进一个结构体，最后系统很难维护；或者让同一个系统同时诉诸多个资源，造成调度顺序变成隐形 bug。
+fn player_move(
+    time: Res<Time>,
+    state: Res<State<GameState>>,
+    keyboard: Res<ButtonInput<KeyCode>>,
+    mut query: Query<(&mut Transform, &mut Velocity), With<Player>>,
+) {
+    if *state.get() != GameState::Playing {
+        return;
+    }
 
-## Rust 里要怎么想
+    let move_x = (keyboard.pressed(KeyCode::KeyD) as i8 - keyboard.pressed(KeyCode::KeyA) as i8) as f32;
+    let move_y = (keyboard.pressed(KeyCode::KeyW) as i8 - keyboard.pressed(KeyCode::KeyS) as i8) as f32;
+    let dir = Vec2::new(move_x, move_y);
+    let delta = time.delta_secs();
 
-一套好的 ECS 代码通常遵守下面几个原则：
+    for (mut transform, mut velocity) in &mut query {
+        if dir.length_squared() > 0.0 {
+            let dir = dir.normalize();
+            velocity.x = dir.x * PLAYER_SPEED;
+            velocity.y = dir.y * PLAYER_SPEED;
+            transform.translation.x += dir.x * PLAYER_SPEED * delta;
+            transform.translation.y += dir.y * PLAYER_SPEED * delta;
+        }
+    }
+}
+```
 
-- 一个组件只表达一个事实，不把“状态 + 行为 + 反馈”混在一起；
-- 资源承载共享状态，且仅在真正需要的系统里使用；
-- 一个 System 明确说明输入与输出，尽量避免隐式副作用；
-- 事件和状态用在不同层次：事件记录事实，状态记录阶段；
-- 调度顺序的设计要被视为程序逻辑的一部分。
+## 这段代码在说什么
 
-这些规则看似抽象，但它们直接影响你后面写测试、调试、扩展和 refactor 的成本。
+这不是“把很多概念堆在一起”的示例，而是一个最小可运行的规则集：
 
-## 关键机制
+- `GameState` 表明：菜单、游戏中、结束界面是不同阶段，系统必须显式分流；
+- `Res<State<GameState>>` 让系统读取当前阶段，而不是从全局变量里偷偷拿状态；
+- `ResMut<NextState<GameState>>` 表示状态切换是一个有先后顺序的事件，不是随手 `if` 打断；
+- `Query<(&mut Transform, &mut Velocity), With<Player>>` 说明：移动逻辑只操作玩家实体，不碰其他对象；
+- `FixedUpdate` 下的 `time.delta_secs()` 表示物理和动作逻辑应该在可复现的时间步里演化，而不是依赖帧率。
 
-1. 碰撞系统最早要解决的是“谁与谁发生了重叠”。
+换句话说，真实项目里，ECS 的难点不是写出一堆 `System`，而是把“状态归属、数据所有权、调度顺序”想清楚。一个 `System` 只负责一类事实：读取输入、更新 Transform、判定碰撞、改变状态。
 
-2. 半径、触发器和层过滤需要由独立组件表达。
+## 具体知识与操作手册
 
-3. 如果把“碰撞结果”写死在一个结构体里，扩展会越来越难。
+### 1. 先分清输入、状态和效果
 
-4. 最小模型是让规则可测试、可验证的前提。
+很多代码写法的问题，不是语法错，而是角色混住：
 
-## 典型误区
+- 输入层：`ButtonInput<KeyCode>` 负责读键盘；
+- 状态层：`GameState` 负责阶段；
+- 结果层：`Transform`、`Velocity`、`GameSession` 负责真实世界变化。
 
-1. 把多个事实压进一个结构体；
-2. 在一个系统里同时写状态和读取状态；
-3. 把状态机和事件流混成一团；
-4. 只看输出，不验证世界中的数据；
-5. 把 UI 或视觉层当成“真实状态”来源。
+如果把输入、状态、视觉反馈写进同一个结构体，后面调试时你会发现“为什么按下一个键，游戏结果和代码路径不一致？”因为系统边界被打破了。
 
-## 小练习
+### 2. `Query` 不是“找一个大对象”，而是“筛选集合中的正确实体”
 
-1. 把一个“万能对象”拆成多个 `Component`，并说明每个组件对应哪条事实。
-2. 选择一个关键状态，写一条测试断言它在 `App::update()` 后发生了哪种变化。
-3. 把一个混合逻辑拆成两个 System：一个负责收集输入，另一个负责写回状态。
-4. 试着把这节课的关键状态判断写成英语问题：what changed, where, and why？
+`With<Player>` 这种过滤条件很关键。它意味着：
 
-## 一句总结
+- 你只改玩家的 `Transform`；
+- 你不必在系统里去判断某个实体是不是敌人；
+- 代码的读者一眼就知道这条逻辑的作用域。
 
-Bevy 不是让你在图像和代码之间疯狂试探，而是让你用 Rust 的类型系统和 ECS 的边界学会说明“这个状态为什么存在”。当你清楚这个问题时，后面的调试、扩展和测试都不再靠运气。
+这也是 ECS 设计的核心：对象不存在“万能长相”，而是通过组件和筛选条件组合成真实的行为。
 
-## 延伸阅读
+### 3. `FixedUpdate` 解决的是“时间不是帧率”问题
 
-- [Rust Book](https://doc.rust-lang.org/book/)
-- [Rust by Example](https://doc.rust-lang.org/rust-by-example/)
-- [Bevy 官方文档](https://bevy.org/learn/)
-- [Bevy API Docs](https://docs.rs/bevy/0.19.1/bevy/)
+在 `player_move` 里，速度乘上 `delta` 让移动和帧率解耦。若你把 `delta` 直接写死，或者直接把 `Update` 里的 `time.delta_secs()` 当成固定物理模拟，会在不同机器上出现：
 
+- 速度不稳定；
+- 碰撞提前/延后；
+- 子弹、敌人和玩家的同步会出现“看起来像随机”的 bug。
 
-## 典型误区
+这就是固定步的价值：让规则稳定，调试也更可靠。
 
-1. 把多个事实压进一个结构体；
-2. 在一个系统里同时写状态和读取状态；
-3. 把状态机和事件流混成一团；
-4. 只看输出，不验证世界中的数据；
-5. 把 UI 或视觉层当成“真实状态”来源。
+### 4. 读代码时，先找“谁拥有状态”
 
-## 小练习
+一个 Bevy 程序最值得问的不是“这个函数是不是长得很高级”，而是：
 
-1. 把一个“万能对象”拆成多个 `Component`，并说明每个组件对应哪条事实。
-2. 选择一个关键状态，写一条测试断言它在 `App::update()` 后发生了哪种变化。
-3. 把一个混合逻辑拆成两个 System：一个负责收集输入，另一个负责写回状态。
-4. 试着把这节课的关键状态判断写成英语问题：what changed, where, and why？
+- 这个值存在哪里？
+- 谁写它？
+- 谁读它？
+- 它是在 `Resource` 里，还是 `Component` 里？
 
-## 一句总结
+`GameState` 和 `GameSession` 这类数据要放在资源里，是因为它们描述的是全局游戏事实；`Velocity` 和 `Transform` 属于实体，因为它们是玩家/敌人自身的状态。
 
-Bevy 不是让你在图像和代码之间疯狂试探，而是让你用 Rust 的类型系统和 ECS 的边界学会说明“这个状态为什么存在”。当你清楚这个问题时，后面的调试、扩展和测试都不再靠运气。
+## 实战诀窍
 
-## 延伸阅读
+- 如果一个系统想同时读取和修改太多东西，先拆出来；
+- 把 `State` 访问写进 `run_if` 或分支，别让系统隐式依赖全局变量；
+- `Query` 的过滤条件要写得具体，不要把全局判断塞进循环里；
+- 如果你怀疑“为什么一帧后会异常”，先看 `delta`、`FixedUpdate` 和 `Input` 的时间来源；
+- 先用 `println!` 或 `debug_assert!` 在关卡边界上验证状态变化，再考虑抽象。
 
-- [Rust Book](https://doc.rust-lang.org/book/)
-- [Rust by Example](https://doc.rust-lang.org/rust-by-example/)
-- [Bevy 官方文档](https://bevy.org/learn/)
-- [Bevy API Docs](https://docs.rs/bevy/0.19.1/bevy/)
+## 练习
+
+1. 把 `GameState` 画成一个状态转换图：`Menu -> Playing -> GameOver`，说明每个状态对应哪类系统。
+2. 复制一段 `player_move` 代码，改成“角色速度来自资源而不是直接写在组件里”，判断这样做有什么收益和代价。
+3. 把 `apply_game_state` 中的状态切换拆成一个独立的系统，说明它和 `player_move` 之间的依赖关系。
+4. 试着在同一个 `System` 中读 `State` 和 `GameSession`，写出一个 bug，然后解释为什么它出现了。
+
+## 一句话总结
+
+真正的 Bevy 程序不是靠“炫技 API”取胜，而是靠把状态、时间和实体职责写清楚。`GameState` 决定阶段，`Query` 决定作用域，`FixedUpdate` 保证规则稳定，这三件事决定了后面所有逻辑能否维护。
