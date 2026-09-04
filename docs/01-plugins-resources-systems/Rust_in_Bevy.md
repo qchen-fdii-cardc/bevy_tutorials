@@ -1,51 +1,96 @@
-# Rust in Bevy 01：Trait、组合与显式依赖
-
-「Plugin 只是一个文件夹」会让项目很快长成文件名驱动的迷宫。`Plugin` 是 Rust trait 定义的功能边界。
+# Rust in Bevy：Plugin、Resource 与 System：把 App 拆成模块
 
 ## 本章 Rust 地图
 
 | Bevy 表面 | Rust 构造 | 设计含义 |
 | --- | --- | --- |
-| `impl Plugin for RuntimeDiagnosticsPlugin` | trait 实现 | 功能以统一装配协议接入 App |
-| `struct RuntimeDiagnosticsPlugin;` | 零大小类型 | 无运行时配置的能力标签 |
-| `init_resource::<DebugOverlay>()` | 泛型函数与 trait bound | 由类型参数选择需初始化的状态 |
-| `Res<ButtonInput<KeyCode>>` | 不可变借用 | 输入采样不能被当前 System 改写 |
-| `ResMut<DebugOverlay>` | 可变借用 | 开关状态有唯一修改者 |
+| `App` | `App::new()` | 把世界、资源和系统联系成一个运行时 |
+| `Plugin` | `impl Plugin for ...` | 把逻辑以模块形式注册 |
+| `Component` | `#[derive(Component)]` | 表达一个实体上的事实 |
+| `Resource` | `#[derive(Resource)]` | 表达全局共享状态 |
+| `System` | `fn` + 参数列表 | 表示输入、输出和状态变换 |
+| `Event` | `struct + Event` | 记录发生过什么 |
+| `State` | `enum + init_state` | 表达当前阶段 |
 
-## Trait 是扩展点，不是继承替身
+## 核心思想
 
-```rust
-struct RuntimeDiagnosticsPlugin;
+解释 Plugin 如何组织时序，Resource 如何承载全局状态，System 如何在世界中做数据变换。
 
-impl Plugin for RuntimeDiagnosticsPlugin {
-    fn build(&self, app: &mut App) {
-        // 注册本功能拥有的状态和规则
-    }
-}
-```
+这意味着用 Rust 编写 Bevy 程序时，最重要的不是“语法能不能写”，而是你是否明确了状态归属。Bevy 的系统参数本身就是一份设计文档：它告诉你这条系统读取什么、写什么、依赖什么。
 
-Rust 没有类继承树来承载 Bevy 功能。`Plugin` trait 给出一个最小协议：任何实现 `build` 的类型都能参与装配。能力通过组合加入 App，不需要让「诊断插件」成为「游戏插件」的子类。
+在真实工程里，最容易出现的问题通常不是编译失败，而是语义混乱。比如把“输入事件、状态机、显示反馈”全塞进一个结构体，最后系统很难维护；或者让同一个系统同时诉诸多个资源，造成调度顺序变成隐形 bug。
 
-零大小类型没有字段，也几乎不占用运行时空间；它的价值是类型身份。需要配置时，再将字段加入 `struct RuntimeDiagnosticsPlugin { initially_enabled: bool }`，并在 `build` 中把配置写入 Resource。
+## Rust 里要怎么想
 
-## 泛型初始化为什么可靠
+一套好的 ECS 代码通常遵守下面几个原则：
 
-`init_resource::<DebugOverlay>()` 的 `::<...>` 是 turbofish 语法，显式指定泛型类型。它要求 `DebugOverlay` 满足 Bevy 的 `Resource` 与 `Default` 约束。编译器在注册点检查这份契约，调用者不会在运行时才发现缺少初值。
+- 一个组件只表达一个事实，不把“状态 + 行为 + 反馈”混在一起；
+- 资源承载共享状态，且仅在真正需要的系统里使用；
+- 一个 System 明确说明输入与输出，尽量避免隐式副作用；
+- 事件和状态用在不同层次：事件记录事实，状态记录阶段；
+- 调度顺序的设计要被视为程序逻辑的一部分。
 
-这体现 Rust 的「让非法状态难以构造」：将约束写进类型和 trait，而不是把缺失 Resource 的检查留给每个 System。
+这些规则看似抽象，但它们直接影响你后面写测试、调试、扩展和 refactor 的成本。
 
-## 组合优于万能上下文
+## 关键机制
 
-`DebugOverlay` 与 `Heartbeat` 是两个独立 Resource，因为它们变化原因不同：一个由输入切换，一个由时间推进。把它们合成 `GameContext` 会扩大每个 System 的可变借用范围，让本可并行的规则共享一把大锁。
+1. Plugin 是带状态的注册单元，不只是语法糖。
 
-在 Rust 中优先让类型表达最小职责。函数参数越准确，调用者越难无意间依赖不该依赖的数据。
+2. Resource 是跨系统共享的真实状态，而不是传参的“全局变量”。
+
+3. System 依赖的参数表明它读取了什么、修改了什么。
+
+4. ECS 的优点在于边界清晰：不同逻辑不抢同一块状态。
+
+## 典型误区
+
+1. 把多个事实压进一个结构体；
+2. 在一个系统里同时写状态和读取状态；
+3. 把状态机和事件流混成一团；
+4. 只看输出，不验证世界中的数据；
+5. 把 UI 或视觉层当成“真实状态”来源。
 
 ## 小练习
 
-将 `RuntimeDiagnosticsPlugin` 改成含 `enabled_by_default: bool` 的配置类型。比较「插件字段只在 `build` 时读取一次」与「Resource 可被系统每帧读取」：前者适合装配配置，后者适合运行期状态。
+1. 把一个“万能对象”拆成多个 `Component`，并说明每个组件对应哪条事实。
+2. 选择一个关键状态，写一条测试断言它在 `App::update()` 后发生了哪种变化。
+3. 把一个混合逻辑拆成两个 System：一个负责收集输入，另一个负责写回状态。
+4. 试着把这节课的关键状态判断写成英语问题：what changed, where, and why？
+
+## 一句总结
+
+Bevy 不是让你在图像和代码之间疯狂试探，而是让你用 Rust 的类型系统和 ECS 的边界学会说明“这个状态为什么存在”。当你清楚这个问题时，后面的调试、扩展和测试都不再靠运气。
 
 ## 延伸阅读
 
-- [Rust Book：Trait 定义共享行为](https://doc.rust-lang.org/book/ch10-02-traits.html)
-- [Rust API Guidelines：构造器](https://rust-lang.github.io/api-guidelines/predictability.html)
-- [Bevy `Plugin` 文档](https://docs.rs/bevy/0.19.1/bevy/app/trait.Plugin.html)
+- [Rust Book](https://doc.rust-lang.org/book/)
+- [Rust by Example](https://doc.rust-lang.org/rust-by-example/)
+- [Bevy 官方文档](https://bevy.org/learn/)
+- [Bevy API Docs](https://docs.rs/bevy/0.19.1/bevy/)
+
+
+## 典型误区
+
+1. 把多个事实压进一个结构体；
+2. 在一个系统里同时写状态和读取状态；
+3. 把状态机和事件流混成一团；
+4. 只看输出，不验证世界中的数据；
+5. 把 UI 或视觉层当成“真实状态”来源。
+
+## 小练习
+
+1. 把一个“万能对象”拆成多个 `Component`，并说明每个组件对应哪条事实。
+2. 选择一个关键状态，写一条测试断言它在 `App::update()` 后发生了哪种变化。
+3. 把一个混合逻辑拆成两个 System：一个负责收集输入，另一个负责写回状态。
+4. 试着把这节课的关键状态判断写成英语问题：what changed, where, and why？
+
+## 一句总结
+
+Bevy 不是让你在图像和代码之间疯狂试探，而是让你用 Rust 的类型系统和 ECS 的边界学会说明“这个状态为什么存在”。当你清楚这个问题时，后面的调试、扩展和测试都不再靠运气。
+
+## 延伸阅读
+
+- [Rust Book](https://doc.rust-lang.org/book/)
+- [Rust by Example](https://doc.rust-lang.org/rust-by-example/)
+- [Bevy 官方文档](https://bevy.org/learn/)
+- [Bevy API Docs](https://docs.rs/bevy/0.19.1/bevy/)
