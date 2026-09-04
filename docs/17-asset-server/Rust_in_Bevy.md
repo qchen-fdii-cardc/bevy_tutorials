@@ -1,70 +1,96 @@
-# Rust in Bevy 17：Handle、AssetServer 与真正的异步边界
+# Rust in Bevy：Asset Server：资源句柄、加载状态与异步边界
 
 ## 本章 Rust 地图
 
 | Bevy 表面 | Rust 构造 | 设计含义 |
 | --- | --- | --- |
-| `AssetServer` | `Res<AssetServer>` | 资源加载入口与状态查询器 |
-| `Handle<T>` | `Handle<HeroAsset>` | 资源引用句柄，允许异步加载继续进行 |
-| `Resource` | `struct` + `Default` | 储存当前状态，不直接存大块数据 |
-| `System` | `fn` + `ResMut<T>` | 读取状态并写回一个更清晰的事实 |
+| `App` | `App::new()` | 把世界、资源和系统联系成一个运行时 |
+| `Plugin` | `impl Plugin for ...` | 把逻辑以模块形式注册 |
+| `Component` | `#[derive(Component)]` | 表达一个实体上的事实 |
+| `Resource` | `#[derive(Resource)]` | 表达全局共享状态 |
+| `System` | `fn` + 参数列表 | 表示输入、输出和状态变换 |
+| `Event` | `struct + Event` | 记录发生过什么 |
+| `State` | `enum + init_state` | 表达当前阶段 |
 
 ## 核心思想
 
-Rust 对“可变性”和“所有权”非常严格，而 Bevy 的资源管理则把这个原则应用到异步资产上。你不能用一个单独的 `HeroAsset` 字段假设它“已经准备好”，因为它的加载全生命周期是拆成多个阶段的。
+把 AssetServer、Handle<T> 和 LoadState 讲成真实的状态模型，而不是“加载完成了就好”.
 
-`AssetServer` 和 `Handle<T>` 的价值在于：
+这意味着用 Rust 编写 Bevy 程序时，最重要的不是“语法能不能写”，而是你是否明确了状态归属。Bevy 的系统参数本身就是一份设计文档：它告诉你这条系统读取什么、写什么、依赖什么。
 
-- 它把文件路径、加载状态和实际数据拆离；
-- 资源的数据并不在 `Resource` 里，而是存在 `Assets<T>` 中；
-- 系统真正关心的是“当前是什么状态”，而不是“我是否碰巧觉得它已可用”。
+在真实工程里，最容易出现的问题通常不是编译失败，而是语义混乱。比如把“输入事件、状态机、显示反馈”全塞进一个结构体，最后系统很难维护；或者让同一个系统同时诉诸多个资源，造成调度顺序变成隐形 bug。
 
-这和 Rust 的借用模型非常契合：一个对象可以在不持有真实数据时，先被引用，然后在适当时刻再拿到实际值。
+## Rust 里要怎么想
 
-## 为什么 `Handle<T>` 比直接存 `Asset` 更合理
+一套好的 ECS 代码通常遵守下面几个原则：
 
-如果你写：
+- 一个组件只表达一个事实，不把“状态 + 行为 + 反馈”混在一起；
+- 资源承载共享状态，且仅在真正需要的系统里使用；
+- 一个 System 明确说明输入与输出，尽量避免隐式副作用；
+- 事件和状态用在不同层次：事件记录事实，状态记录阶段；
+- 调度顺序的设计要被视为程序逻辑的一部分。
 
-```rust
-struct HeroToken {
-    asset: HeroAsset,
-}
-```
+这些规则看似抽象，但它们直接影响你后面写测试、调试、扩展和 refactor 的成本。
 
-你很快会遇到一个问题：`HeroAsset` 是资产数据，不是一个随时可用的常量。它本来就需要读文件、解析、缓存和引用管理。`Handle<HeroAsset>` 恰恰表达了“我有这个资源的引用”，而不是“我已经拥有这个资源的全部数据”。
+## 关键机制
 
-这能避免两种典型错误：
+1. AssetServer 是加载与查询入口。
 
-1. 在加载前读取图片内容，导致空值或未初始化；
-2. 把加载状态和数据内容塞进同一个结构体，系统边界就消失了。
+2. Handle<T> 是引用，不是数据本身。
 
-## 本章中最重要的 Rust 结构
+3. LoadState 表示 Loading/Loaded/Failed 等真实阶段。
 
-```rust
-#[derive(Resource, Default)]
-struct AssetReport {
-    handle: Option<Handle<HeroAsset>>,
-    state: LoadState,
-}
-```
+4. 异步加载的关键在于把状态表达清楚，而不是盯着屏幕等待。
 
-这里的几个设计点很关键：
+## 典型误区
 
-- `Option<Handle<HeroAsset>>` 表示“可能还没有请求完成”；
-- `LoadState` 是状态机；
-- `System` 可以借助这些事物判断是否安全地继续绘制或切换 UI。
-
-这是 Bevy 里一个极简而真实的示例：状态本身就成了一等的数据。
+1. 把多个事实压进一个结构体；
+2. 在一个系统里同时写状态和读取状态；
+3. 把状态机和事件流混成一团；
+4. 只看输出，不验证世界中的数据；
+5. 把 UI 或视觉层当成“真实状态”来源。
 
 ## 小练习
 
-1. 把 `AssetReport` 拆成一个只记录 `handle` 的资源和一个只记录 `state` 的资源，观察边界是否更清晰。
-2. 把 `LoadState::Failed` 分支写成一个独立系统，看看错误处理是否更容易测试。
-3. 在 Rust 侧写一条 `assert!(matches!(state, LoadState::Loading | LoadState::Loaded));` 式断言，验证你的状态模型确实在世界中生效。
+1. 把一个“万能对象”拆成多个 `Component`，并说明每个组件对应哪条事实。
+2. 选择一个关键状态，写一条测试断言它在 `App::update()` 后发生了哪种变化。
+3. 把一个混合逻辑拆成两个 System：一个负责收集输入，另一个负责写回状态。
+4. 试着把这节课的关键状态判断写成英语问题：what changed, where, and why？
+
+## 一句总结
+
+Bevy 不是让你在图像和代码之间疯狂试探，而是让你用 Rust 的类型系统和 ECS 的边界学会说明“这个状态为什么存在”。当你清楚这个问题时，后面的调试、扩展和测试都不再靠运气。
 
 ## 延伸阅读
 
-- [Rust Book：枚举](https://doc.rust-lang.org/book/ch06-01-defining-an-enum.html)
-- [Rust Book：测试](https://doc.rust-lang.org/book/ch11-00-testing.html)
+- [Rust Book](https://doc.rust-lang.org/book/)
+- [Rust by Example](https://doc.rust-lang.org/rust-by-example/)
 - [Bevy 官方文档](https://bevy.org/learn/)
-- [Bevy AssetServer API](https://docs.rs/bevy/0.19.1/bevy/asset/struct.AssetServer.html)
+- [Bevy API Docs](https://docs.rs/bevy/0.19.1/bevy/)
+
+
+## 典型误区
+
+1. 把多个事实压进一个结构体；
+2. 在一个系统里同时写状态和读取状态；
+3. 把状态机和事件流混成一团；
+4. 只看输出，不验证世界中的数据；
+5. 把 UI 或视觉层当成“真实状态”来源。
+
+## 小练习
+
+1. 把一个“万能对象”拆成多个 `Component`，并说明每个组件对应哪条事实。
+2. 选择一个关键状态，写一条测试断言它在 `App::update()` 后发生了哪种变化。
+3. 把一个混合逻辑拆成两个 System：一个负责收集输入，另一个负责写回状态。
+4. 试着把这节课的关键状态判断写成英语问题：what changed, where, and why？
+
+## 一句总结
+
+Bevy 不是让你在图像和代码之间疯狂试探，而是让你用 Rust 的类型系统和 ECS 的边界学会说明“这个状态为什么存在”。当你清楚这个问题时，后面的调试、扩展和测试都不再靠运气。
+
+## 延伸阅读
+
+- [Rust Book](https://doc.rust-lang.org/book/)
+- [Rust by Example](https://doc.rust-lang.org/rust-by-example/)
+- [Bevy 官方文档](https://bevy.org/learn/)
+- [Bevy API Docs](https://docs.rs/bevy/0.19.1/bevy/)
