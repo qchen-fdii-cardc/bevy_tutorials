@@ -1,51 +1,96 @@
-# Rust in Bevy 02：类型化查询、迭代器与延迟副作用
-
-「日志只是 `println!` 的升级版」会错过 Rust 在这里提供的真正能力：结构化字段、类型化数据和延迟副作用可以组成可审计的证据链。
+# Rust in Bevy：Debug Visualization：日志、可视化和状态证明
 
 ## 本章 Rust 地图
 
 | Bevy 表面 | Rust 构造 | 设计含义 |
 | --- | --- | --- |
-| `Query<&Transform, With<DebugMarker>>` | 泛型、引用与 marker type | 查询的数据形状和筛选条件都进入类型系统 |
-| `for transform in &markers` | `IntoIterator` | 逐项读取借用的 Component，不取得所有权 |
-| `commands.spawn(...)` | Command buffer | 将 World 变更延迟到安全应用点 |
-| `info!(field = value, ...)` | macro 与结构化日志 | 保留可筛选字段，而非拼接文本 |
-| `Vec2` 与 `Transform` | 值类型组合 | 坐标计算可独立于渲染表现 |
+| `App` | `App::new()` | 把世界、资源和系统联系成一个运行时 |
+| `Plugin` | `impl Plugin for ...` | 把逻辑以模块形式注册 |
+| `Component` | `#[derive(Component)]` | 表达一个实体上的事实 |
+| `Resource` | `#[derive(Resource)]` | 表达全局共享状态 |
+| `System` | `fn` + 参数列表 | 表示输入、输出和状态变换 |
+| `Event` | `struct + Event` | 记录发生过什么 |
+| `State` | `enum + init_state` | 表达当前阶段 |
 
-## Query 的类型参数就是选择器
+## 核心思想
 
-```rust
-Query<&Transform, With<DebugMarker>>
-```
+强调调试不是“看一眼屏幕”，而是把状态和行为显式化。
 
-第一个类型参数说明每个匹配实体借出 `&Transform`；第二个参数是 filter，说明只匹配拥有 `DebugMarker` 的实体。函数体不需要检查空指针、类型标签字符串或运行时反射，编译器已经把数据形状固定下来。
+这意味着用 Rust 编写 Bevy 程序时，最重要的不是“语法能不能写”，而是你是否明确了状态归属。Bevy 的系统参数本身就是一份设计文档：它告诉你这条系统读取什么、写什么、依赖什么。
 
-`DebugMarker` 是 marker type：空 struct 的存在本身就是分类信息。用类型分类能避开字符串拼写错误，也让过滤条件可被 Bevy 的访问分析读取。
+在真实工程里，最容易出现的问题通常不是编译失败，而是语义混乱。比如把“输入事件、状态机、显示反馈”全塞进一个结构体，最后系统很难维护；或者让同一个系统同时诉诸多个资源，造成调度顺序变成隐形 bug。
 
-## 迭代时为什么不移动数据
+## Rust 里要怎么想
 
-```rust
-for transform in &markers {
-    gizmos.circle_2d(transform.translation.truncate(), 12.0, YELLOW);
-}
-```
+一套好的 ECS 代码通常遵守下面几个原则：
 
-`&markers` 产生迭代器，元素是对 World 中 `Transform` 的借用。不能把 Component 从 Query 中 move 出来，这是对的：实体仍拥有它的 Component，绘制系统只获准观察。
+- 一个组件只表达一个事实，不把“状态 + 行为 + 反馈”混在一起；
+- 资源承载共享状态，且仅在真正需要的系统里使用；
+- 一个 System 明确说明输入与输出，尽量避免隐式副作用；
+- 事件和状态用在不同层次：事件记录事实，状态记录阶段；
+- 调度顺序的设计要被视为程序逻辑的一部分。
 
-当逻辑只需要读值时，保留引用或复制小型 `Copy` 值；只有系统确实拥有修改理由时才请求 `&mut T`。这条 Rust 习惯直接降低 ECS 调度冲突。
+这些规则看似抽象，但它们直接影响你后面写测试、调试、扩展和 refactor 的成本。
 
-## Command buffer 把副作用与观察分开
+## 关键机制
 
-`Commands` 收集 spawn 与 despawn 请求，之后在调度器安排的安全点应用。这个设计避免遍历 World 时改变同一集合，也让 System 可以先读取稳定快照，再提交变更。
+1. 日志最小，却是验证世界状态最直接的工具。
 
-因此按 `N` 后同一帧的 Query 未必看见新探针。这里没有「立即一致性」承诺；代码应把命令排队和结果观察分到正确的系统阶段。
+2. 可视化要服务于假设，而不是只为了炫技。
+
+3. Bevy 中的 gizmos、debug log 与断言同样重要。
+
+4. 如果你不能证明状态变了，视觉上的“像对”不算结论。
+
+## 典型误区
+
+1. 把多个事实压进一个结构体；
+2. 在一个系统里同时写状态和读取状态；
+3. 把状态机和事件流混成一团；
+4. 只看输出，不验证世界中的数据；
+5. 把 UI 或视觉层当成“真实状态”来源。
 
 ## 小练习
 
-把新探针位置计算抽成 `fn next_marker_position(marker_count: usize) -> Vec2`，为它添加普通 Rust 单元测试。纯函数没有 World、窗口和输入依赖，最适合测试边界值与坐标算法。
+1. 把一个“万能对象”拆成多个 `Component`，并说明每个组件对应哪条事实。
+2. 选择一个关键状态，写一条测试断言它在 `App::update()` 后发生了哪种变化。
+3. 把一个混合逻辑拆成两个 System：一个负责收集输入，另一个负责写回状态。
+4. 试着把这节课的关键状态判断写成英语问题：what changed, where, and why？
+
+## 一句总结
+
+Bevy 不是让你在图像和代码之间疯狂试探，而是让你用 Rust 的类型系统和 ECS 的边界学会说明“这个状态为什么存在”。当你清楚这个问题时，后面的调试、扩展和测试都不再靠运气。
 
 ## 延伸阅读
 
-- [Rust Book：迭代器](https://doc.rust-lang.org/book/ch13-02-iterators.html)
-- [Rust Book：宏](https://doc.rust-lang.org/book/ch20-05-macros.html)
-- [Bevy `Commands` 文档](https://docs.rs/bevy/0.19.1/bevy/ecs/system/struct.Commands.html)
+- [Rust Book](https://doc.rust-lang.org/book/)
+- [Rust by Example](https://doc.rust-lang.org/rust-by-example/)
+- [Bevy 官方文档](https://bevy.org/learn/)
+- [Bevy API Docs](https://docs.rs/bevy/0.19.1/bevy/)
+
+
+## 典型误区
+
+1. 把多个事实压进一个结构体；
+2. 在一个系统里同时写状态和读取状态；
+3. 把状态机和事件流混成一团；
+4. 只看输出，不验证世界中的数据；
+5. 把 UI 或视觉层当成“真实状态”来源。
+
+## 小练习
+
+1. 把一个“万能对象”拆成多个 `Component`，并说明每个组件对应哪条事实。
+2. 选择一个关键状态，写一条测试断言它在 `App::update()` 后发生了哪种变化。
+3. 把一个混合逻辑拆成两个 System：一个负责收集输入，另一个负责写回状态。
+4. 试着把这节课的关键状态判断写成英语问题：what changed, where, and why？
+
+## 一句总结
+
+Bevy 不是让你在图像和代码之间疯狂试探，而是让你用 Rust 的类型系统和 ECS 的边界学会说明“这个状态为什么存在”。当你清楚这个问题时，后面的调试、扩展和测试都不再靠运气。
+
+## 延伸阅读
+
+- [Rust Book](https://doc.rust-lang.org/book/)
+- [Rust by Example](https://doc.rust-lang.org/rust-by-example/)
+- [Bevy 官方文档](https://bevy.org/learn/)
+- [Bevy API Docs](https://docs.rs/bevy/0.19.1/bevy/)
