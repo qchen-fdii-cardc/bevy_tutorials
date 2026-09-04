@@ -1,34 +1,96 @@
-# Rust in Bevy 18：动画状态与状态机
+# Rust in Bevy：Animation State：动画不是图片播放，而是状态机
 
 ## 本章 Rust 地图
 
 | Bevy 表面 | Rust 构造 | 设计含义 |
 | --- | --- | --- |
-| `Component` | `struct` + derive | 表达一条事实 |
-| `Resource` | `struct` + `Default` | 存储共享状态 |
-| `System` | `fn` + Query 参数 | 变换输入状态 |
-| `Event` | `struct` + `Event` | 记录发生过什么 |
+| `App` | `App::new()` | 把世界、资源和系统联系成一个运行时 |
+| `Plugin` | `impl Plugin for ...` | 把逻辑以模块形式注册 |
+| `Component` | `#[derive(Component)]` | 表达一个实体上的事实 |
+| `Resource` | `#[derive(Resource)]` | 表达全局共享状态 |
+| `System` | `fn` + 参数列表 | 表示输入、输出和状态变换 |
+| `Event` | `struct + Event` | 记录发生过什么 |
+| `State` | `enum + init_state` | 表达当前阶段 |
 
 ## 核心思想
 
-Bevy 不是靠“大量 API 拼接”来工作，而是靠清晰的状态归属和调度边界。Rust 的类型系统和借用检查器与 ECS 共同要求你在代码中说明：谁拥有状态？谁能读取？谁能修改？
+讲述 sprite animation、state machine 与 transition 的关系。
 
-这意味着你需要把一大块需求拆开：
+这意味着用 Rust 编写 Bevy 程序时，最重要的不是“语法能不能写”，而是你是否明确了状态归属。Bevy 的系统参数本身就是一份设计文档：它告诉你这条系统读取什么、写什么、依赖什么。
 
-- 用 `Component` 表示实体事实；
-- 用 `Resource` 表示全局或共享状态；
-- 用 `System` 表示数据变换；
-- 用 `Event` 表示状态变化；
-- 用 `State` / `Run Condition` 管理流程。
+在真实工程里，最容易出现的问题通常不是编译失败，而是语义混乱。比如把“输入事件、状态机、显示反馈”全塞进一个结构体，最后系统很难维护；或者让同一个系统同时诉诸多个资源，造成调度顺序变成隐形 bug。
+
+## Rust 里要怎么想
+
+一套好的 ECS 代码通常遵守下面几个原则：
+
+- 一个组件只表达一个事实，不把“状态 + 行为 + 反馈”混在一起；
+- 资源承载共享状态，且仅在真正需要的系统里使用；
+- 一个 System 明确说明输入与输出，尽量避免隐式副作用；
+- 事件和状态用在不同层次：事件记录事实，状态记录阶段；
+- 调度顺序的设计要被视为程序逻辑的一部分。
+
+这些规则看似抽象，但它们直接影响你后面写测试、调试、扩展和 refactor 的成本。
+
+## 关键机制
+
+1. 动画状态描述角色的行为阶段，而不是单纯的图像序列。
+
+2. 状态转换必须是显式的，否则很容易出现瞎切换。
+
+3. 动画和逻辑需要彼此隔离，但同样依赖状态。
+
+4. 状态机是控制角色可见行为的抽象。
+
+## 典型误区
+
+1. 把多个事实压进一个结构体；
+2. 在一个系统里同时写状态和读取状态；
+3. 把状态机和事件流混成一团；
+4. 只看输出，不验证世界中的数据；
+5. 把 UI 或视觉层当成“真实状态”来源。
 
 ## 小练习
 
-1. 把一个“万能值”拆成明确的结构体与字段。
-2. 评估它属于 Component、Resource 还是 Event。
-3. 为关键状态补一条测试。
+1. 把一个“万能对象”拆成多个 `Component`，并说明每个组件对应哪条事实。
+2. 选择一个关键状态，写一条测试断言它在 `App::update()` 后发生了哪种变化。
+3. 把一个混合逻辑拆成两个 System：一个负责收集输入，另一个负责写回状态。
+4. 试着把这节课的关键状态判断写成英语问题：what changed, where, and why？
+
+## 一句总结
+
+Bevy 不是让你在图像和代码之间疯狂试探，而是让你用 Rust 的类型系统和 ECS 的边界学会说明“这个状态为什么存在”。当你清楚这个问题时，后面的调试、扩展和测试都不再靠运气。
 
 ## 延伸阅读
 
-- [Rust Book：结构体](https://doc.rust-lang.org/book/ch05-01-defining-structs.html)
-- [Rust Book：测试](https://doc.rust-lang.org/book/ch11-00-testing.html)
+- [Rust Book](https://doc.rust-lang.org/book/)
+- [Rust by Example](https://doc.rust-lang.org/rust-by-example/)
 - [Bevy 官方文档](https://bevy.org/learn/)
+- [Bevy API Docs](https://docs.rs/bevy/0.19.1/bevy/)
+
+
+## 典型误区
+
+1. 把多个事实压进一个结构体；
+2. 在一个系统里同时写状态和读取状态；
+3. 把状态机和事件流混成一团；
+4. 只看输出，不验证世界中的数据；
+5. 把 UI 或视觉层当成“真实状态”来源。
+
+## 小练习
+
+1. 把一个“万能对象”拆成多个 `Component`，并说明每个组件对应哪条事实。
+2. 选择一个关键状态，写一条测试断言它在 `App::update()` 后发生了哪种变化。
+3. 把一个混合逻辑拆成两个 System：一个负责收集输入，另一个负责写回状态。
+4. 试着把这节课的关键状态判断写成英语问题：what changed, where, and why？
+
+## 一句总结
+
+Bevy 不是让你在图像和代码之间疯狂试探，而是让你用 Rust 的类型系统和 ECS 的边界学会说明“这个状态为什么存在”。当你清楚这个问题时，后面的调试、扩展和测试都不再靠运气。
+
+## 延伸阅读
+
+- [Rust Book](https://doc.rust-lang.org/book/)
+- [Rust by Example](https://doc.rust-lang.org/rust-by-example/)
+- [Bevy 官方文档](https://bevy.org/learn/)
+- [Bevy API Docs](https://docs.rs/bevy/0.19.1/bevy/)
