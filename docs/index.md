@@ -14,6 +14,7 @@ roadmap
 stages/stage-00-observability/README
 03-ecs-data-model/README
 04-query-access-conflicts/README
+05-commands-lifecycle/README
 capstone
 contributing
 ```
@@ -50,6 +51,11 @@ contributing
 		<span class="chapter-link-phase">阶段 1</span>
 		<a href="04-query-access-conflicts/README.html">教程 04：Query 访问冲突</a>
 		<a class="chapter-link-rust" href="04-query-access-conflicts/README.html#rust-in-bevy">Rust in Bevy</a>
+	</div>
+	<div class="chapter-link-row">
+		<span class="chapter-link-phase">阶段 1</span>
+		<a href="05-commands-lifecycle/README.html">教程 05：Commands 与生命周期</a>
+		<a class="chapter-link-rust" href="05-commands-lifecycle/README.html#rust-in-bevy">Rust in Bevy</a>
 	</div>
 </div>
 

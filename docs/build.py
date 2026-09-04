@@ -15,6 +15,7 @@ CHAPTER_DIRECTORIES = [
     "02-debug-visualization",
     "03-ecs-data-model",
     "04-query-access-conflicts",
+    "05-commands-lifecycle",
 ]
 
 
