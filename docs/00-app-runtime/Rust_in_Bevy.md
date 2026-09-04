@@ -1,53 +1,96 @@
-# Rust in Bevy 00：Builder、所有权与唯一 Resource
-
-「链式调用看起来很像语法糖」会遮住关键事实：它是一连串消耗或可变借用 `App` 的普通 Rust 方法调用。
+# Rust in Bevy：App Runtime：启动顺序、Update 与调度边界
 
 ## 本章 Rust 地图
 
 | Bevy 表面 | Rust 构造 | 设计含义 |
 | --- | --- | --- |
-| `App::new().add_systems(...).run()` | Builder 风格 API 与方法链 | 用类型约束运行时装配顺序 |
-| `#[derive(Resource)]` | derive macro 与 trait 实现 | 将类型声明为 World 中唯一共享状态 |
-| `Res<Time>` | 共享借用 `&T` 的系统参数包装 | 系统可读、不可改 Time |
-| `ResMut<RuntimeStats>` | 独占借用 `&mut T` 的系统参数包装 | 系统获得唯一写入权 |
-| `impl Default` | `Default` trait | 将初始状态从装配代码中抽离 |
+| `App` | `App::new()` | 把世界、资源和系统联系成一个运行时 |
+| `Plugin` | `impl Plugin for ...` | 把逻辑以模块形式注册 |
+| `Component` | `#[derive(Component)]` | 表达一个实体上的事实 |
+| `Resource` | `#[derive(Resource)]` | 表达全局共享状态 |
+| `System` | `fn` + 参数列表 | 表示输入、输出和状态变换 |
+| `Event` | `struct + Event` | 记录发生过什么 |
+| `State` | `enum + init_state` | 表达当前阶段 |
 
-## Builder 链不是魔法
+## 核心思想
 
-```rust
-App::new()
-    .insert_resource(RuntimeStats::default())
-    .add_plugins(DefaultPlugins)
-    .add_systems(Startup, setup)
-    .run();
-```
+从最小的 Bevy App 骨架出发，解释启动期、更新期、资源和系统是如何被组织起来的。
 
-每一步都返回可继续配置的 `App`，最后 `run(self)` 取得应用所有权并进入事件循环。Rust 通过 `self`、`&mut self` 和返回值控制调用权限：配置完成后，运行时不再把可修改的 `App` 留在当前作用域。
+这意味着用 Rust 编写 Bevy 程序时，最重要的不是“语法能不能写”，而是你是否明确了状态归属。Bevy 的系统参数本身就是一份设计文档：它告诉你这条系统读取什么、写什么、依赖什么。
 
-这是一种常见的 Rust API 设计：构建阶段允许累积配置，终结方法消耗构建器，阻止「程序运行后继续偷偷改初始化图」的半成品状态。
+在真实工程里，最容易出现的问题通常不是编译失败，而是语义混乱。比如把“输入事件、状态机、显示反馈”全塞进一个结构体，最后系统很难维护；或者让同一个系统同时诉诸多个资源，造成调度顺序变成隐形 bug。
 
-## `Default` 表达可用的零配置
+## Rust 里要怎么想
 
-`RuntimeStats::default()` 集中给出初始时间、帧数和日志节流点。它比散落的 `0.0`、`0` 更可审计：读者能在一个 `impl Default` 中看到所有初始不变量。
+一套好的 ECS 代码通常遵守下面几个原则：
 
-当类型存在真正安全的默认值时，实现 `Default`。当每个字段都必须由调用方决定，例如存档路径或网络地址，强行提供默认值只会制造伪配置。
+- 一个组件只表达一个事实，不把“状态 + 行为 + 反馈”混在一起；
+- 资源承载共享状态，且仅在真正需要的系统里使用；
+- 一个 System 明确说明输入与输出，尽量避免隐式副作用；
+- 事件和状态用在不同层次：事件记录事实，状态记录阶段；
+- 调度顺序的设计要被视为程序逻辑的一部分。
 
-## 借用检查器如何成为调度信息
+这些规则看似抽象，但它们直接影响你后面写测试、调试、扩展和 refactor 的成本。
 
-```rust
-fn advance_runtime(time: Res<Time>, mut stats: ResMut<RuntimeStats>)
-```
+## 关键机制
 
-这段签名相当于声明「读取 `Time`，独占修改 `RuntimeStats`」。普通 Rust 中，同一时刻不能同时拥有同一值的共享借用和可变借用；Bevy 将相同规则提升到 System 调度层，提前发现世界状态的竞争。
+1. App 是世界状态和调度器的总入口，StartUp 与 Update 并非同一层语义。
 
-不要用 `Mutex` 把所有状态包起来逃避这一层。游戏逻辑的同步边界应先由 ECS 读写集合表达；锁会把错误推迟到运行时，并让并行调度失去可见性。
+2. 系统不是“随手函数”，而是对世界状态进行读取与写回的边界。
+
+3. 明白调度顺序，才能看懂为什么某些资源先初始化，某些逻辑在固定时步内稳定。
+
+4. 一开始最重要的不是炫技，而是把“什么时候发生什么”说清楚。
+
+## 典型误区
+
+1. 把多个事实压进一个结构体；
+2. 在一个系统里同时写状态和读取状态；
+3. 把状态机和事件流混成一团；
+4. 只看输出，不验证世界中的数据；
+5. 把 UI 或视觉层当成“真实状态”来源。
 
 ## 小练习
 
-为 `RuntimeStats` 添加 `is_reporting_due(&self) -> bool`，只让纯判断逻辑进入方法。System 仍负责读取 Time 和修改 Resource。这个分工体现 Rust 中常用的模式：数据类型维护局部不变量，外部协调者负责 I/O 与生命周期。
+1. 把一个“万能对象”拆成多个 `Component`，并说明每个组件对应哪条事实。
+2. 选择一个关键状态，写一条测试断言它在 `App::update()` 后发生了哪种变化。
+3. 把一个混合逻辑拆成两个 System：一个负责收集输入，另一个负责写回状态。
+4. 试着把这节课的关键状态判断写成英语问题：what changed, where, and why？
+
+## 一句总结
+
+Bevy 不是让你在图像和代码之间疯狂试探，而是让你用 Rust 的类型系统和 ECS 的边界学会说明“这个状态为什么存在”。当你清楚这个问题时，后面的调试、扩展和测试都不再靠运气。
 
 ## 延伸阅读
 
-- [Rust Book：方法语法](https://doc.rust-lang.org/book/ch05-03-method-syntax.html)
-- [Rust Book：所有权](https://doc.rust-lang.org/book/ch04-00-understanding-ownership.html)
-- [Rust Book：Trait](https://doc.rust-lang.org/book/ch10-02-traits.html)
+- [Rust Book](https://doc.rust-lang.org/book/)
+- [Rust by Example](https://doc.rust-lang.org/rust-by-example/)
+- [Bevy 官方文档](https://bevy.org/learn/)
+- [Bevy API Docs](https://docs.rs/bevy/0.19.1/bevy/)
+
+
+## 典型误区
+
+1. 把多个事实压进一个结构体；
+2. 在一个系统里同时写状态和读取状态；
+3. 把状态机和事件流混成一团；
+4. 只看输出，不验证世界中的数据；
+5. 把 UI 或视觉层当成“真实状态”来源。
+
+## 小练习
+
+1. 把一个“万能对象”拆成多个 `Component`，并说明每个组件对应哪条事实。
+2. 选择一个关键状态，写一条测试断言它在 `App::update()` 后发生了哪种变化。
+3. 把一个混合逻辑拆成两个 System：一个负责收集输入，另一个负责写回状态。
+4. 试着把这节课的关键状态判断写成英语问题：what changed, where, and why？
+
+## 一句总结
+
+Bevy 不是让你在图像和代码之间疯狂试探，而是让你用 Rust 的类型系统和 ECS 的边界学会说明“这个状态为什么存在”。当你清楚这个问题时，后面的调试、扩展和测试都不再靠运气。
+
+## 延伸阅读
+
+- [Rust Book](https://doc.rust-lang.org/book/)
+- [Rust by Example](https://doc.rust-lang.org/rust-by-example/)
+- [Bevy 官方文档](https://bevy.org/learn/)
+- [Bevy API Docs](https://docs.rs/bevy/0.19.1/bevy/)
