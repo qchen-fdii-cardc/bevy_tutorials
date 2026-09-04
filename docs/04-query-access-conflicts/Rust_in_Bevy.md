@@ -1,48 +1,96 @@
-# Rust in Bevy 04：可变别名、类型别名与阶段化访问
-
-「借用检查器妨碍写代码」是把数据竞争当作自由。它要求你标出谁在何时拥有写权限，正好对应游戏规则的真实边界。
+# Rust in Bevy：Query 与 Access Conflicts：读取与写回的边界
 
 ## 本章 Rust 地图
 
 | Bevy 表面 | Rust 构造 | 设计含义 |
 | --- | --- | --- |
-| `Query<&Health>` | 共享借用 | 多个规则可以同时观察生命值 |
-| `Query<&mut Health, With<Player>>` | 独占借用加类型过滤 | 写权限仅限玩家集合 |
-| `ParamSet<(..., ...)>` | 生命周期受限的分阶段访问 | 同类数据先读后写，避免别名 |
-| `type EnemyHealthReader = ...` | 类型别名 | 为复杂泛型签名赋予业务含义 |
-| `#[cfg(test)]` | 条件编译 | 只为测试保留辅助规则 |
+| `App` | `App::new()` | 把世界、资源和系统联系成一个运行时 |
+| `Plugin` | `impl Plugin for ...` | 把逻辑以模块形式注册 |
+| `Component` | `#[derive(Component)]` | 表达一个实体上的事实 |
+| `Resource` | `#[derive(Resource)]` | 表达全局共享状态 |
+| `System` | `fn` + 参数列表 | 表示输入、输出和状态变换 |
+| `Event` | `struct + Event` | 记录发生过什么 |
+| `State` | `enum + init_state` | 表达当前阶段 |
 
-## `&mut` 的真正含义
+## 核心思想
 
-Rust 保证同一时刻一份数据要么有任意数量的 `&T`，要么只有一个 `&mut T`。这条规则防止未定义行为和逻辑竞争，它不是可选的风格建议。
+从 Rust 借用和 ECS 访问规则出发，说明为什么查询时需要分离读取和写回。
 
-Bevy 从 System 参数推导这份访问集合。`Query<&mut Health, With<Player>>` 明确要求玩家的生命值写权限；`Query<&mut Health, With<Enemy>>` 明确要求敌人的写权限。集合互斥时，两个 System 可以安全并发。
+这意味着用 Rust 编写 Bevy 程序时，最重要的不是“语法能不能写”，而是你是否明确了状态归属。Bevy 的系统参数本身就是一份设计文档：它告诉你这条系统读取什么、写什么、依赖什么。
 
-## Filter 是证明的一部分
+在真实工程里，最容易出现的问题通常不是编译失败，而是语义混乱。比如把“输入事件、状态机、显示反馈”全塞进一个结构体，最后系统很难维护；或者让同一个系统同时诉诸多个资源，造成调度顺序变成隐形 bug。
 
-`With<Player>` 不只是方便筛选。它参与「两个 Query 是否可能命中同一 Component」的证明。若实体能同时拥有 `Player` 与 `Enemy`，两个写者的互斥前提已经失效。
+## Rust 里要怎么想
 
-因此，Component 设计需要维护不变量。阵营天然互斥时，`Faction` enum 往往比多个独立 marker 更容易保证正确状态；类型系统不能替你自动补上所有领域规则。
+一套好的 ECS 代码通常遵守下面几个原则：
 
-## `ParamSet` 与分阶段算法
+- 一个组件只表达一个事实，不把“状态 + 行为 + 反馈”混在一起；
+- 资源承载共享状态，且仅在真正需要的系统里使用；
+- 一个 System 明确说明输入与输出，尽量避免隐式副作用；
+- 事件和状态用在不同层次：事件记录事实，状态记录阶段；
+- 调度顺序的设计要被视为程序逻辑的一部分。
 
-```rust
-let enemy_count = queries.p0().iter().count() as i32;
-for mut health in &mut queries.p1() {
-    health.0 += enemy_count;
-}
-```
+这些规则看似抽象，但它们直接影响你后面写测试、调试、扩展和 refactor 的成本。
 
-`ParamSet` 让 `p0()` 与 `p1()` 的访问不能同时存活。代码先产生一个普通数值 `enemy_count`，只读借用结束，然后进入写阶段。这是 Rust 常见的两阶段模式：先收集所需事实，再实施变更。
+## 关键机制
 
-类型别名 `EnemyHealthReader` 与 `PlayerHealthWriter` 去掉重复的泛型噪音，并把两个阶段的角色写进名称。类型别名不创建新类型，它只是让复杂签名可读。
+1. 一个 System 读取了哪些组件，决定了它能否和另一个 System 并行执行。
+
+2. 写入同一块数据是冲突的，也就是调度器的核心约束。
+
+3. Query 参数不是“方便写代码”，而是在世界里声明依赖。
+
+4. 理解 access conflicts 是后面系统设计的基础。
+
+## 典型误区
+
+1. 把多个事实压进一个结构体；
+2. 在一个系统里同时写状态和读取状态；
+3. 把状态机和事件流混成一团；
+4. 只看输出，不验证世界中的数据；
+5. 把 UI 或视觉层当成“真实状态”来源。
 
 ## 小练习
 
-写一个 `Damage(i32)` newtype 和 `fn apply_damage(health: &mut Health, damage: Damage)`。让函数只处理数值变化；目标筛选、事件读取和日志仍留给 System。这样的函数可脱离 ECS 测试，也不会无意取得 World 的过大访问权限。
+1. 把一个“万能对象”拆成多个 `Component`，并说明每个组件对应哪条事实。
+2. 选择一个关键状态，写一条测试断言它在 `App::update()` 后发生了哪种变化。
+3. 把一个混合逻辑拆成两个 System：一个负责收集输入，另一个负责写回状态。
+4. 试着把这节课的关键状态判断写成英语问题：what changed, where, and why？
+
+## 一句总结
+
+Bevy 不是让你在图像和代码之间疯狂试探，而是让你用 Rust 的类型系统和 ECS 的边界学会说明“这个状态为什么存在”。当你清楚这个问题时，后面的调试、扩展和测试都不再靠运气。
 
 ## 延伸阅读
 
-- [Rust Book：引用与借用](https://doc.rust-lang.org/book/ch04-02-references-and-borrowing.html)
-- [Rust Reference：类型别名](https://doc.rust-lang.org/reference/items/type-aliases.html)
-- [Bevy `ParamSet` 文档](https://docs.rs/bevy/0.19.1/bevy/ecs/system/struct.ParamSet.html)
+- [Rust Book](https://doc.rust-lang.org/book/)
+- [Rust by Example](https://doc.rust-lang.org/rust-by-example/)
+- [Bevy 官方文档](https://bevy.org/learn/)
+- [Bevy API Docs](https://docs.rs/bevy/0.19.1/bevy/)
+
+
+## 典型误区
+
+1. 把多个事实压进一个结构体；
+2. 在一个系统里同时写状态和读取状态；
+3. 把状态机和事件流混成一团；
+4. 只看输出，不验证世界中的数据；
+5. 把 UI 或视觉层当成“真实状态”来源。
+
+## 小练习
+
+1. 把一个“万能对象”拆成多个 `Component`，并说明每个组件对应哪条事实。
+2. 选择一个关键状态，写一条测试断言它在 `App::update()` 后发生了哪种变化。
+3. 把一个混合逻辑拆成两个 System：一个负责收集输入，另一个负责写回状态。
+4. 试着把这节课的关键状态判断写成英语问题：what changed, where, and why？
+
+## 一句总结
+
+Bevy 不是让你在图像和代码之间疯狂试探，而是让你用 Rust 的类型系统和 ECS 的边界学会说明“这个状态为什么存在”。当你清楚这个问题时，后面的调试、扩展和测试都不再靠运气。
+
+## 延伸阅读
+
+- [Rust Book](https://doc.rust-lang.org/book/)
+- [Rust by Example](https://doc.rust-lang.org/rust-by-example/)
+- [Bevy 官方文档](https://bevy.org/learn/)
+- [Bevy API Docs](https://docs.rs/bevy/0.19.1/bevy/)
