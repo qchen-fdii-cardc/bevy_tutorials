@@ -1,50 +1,32 @@
-# Rust in Bevy 03：组合数据、Newtype 与可测试规则
+# Rust in Bevy 03：Struct、新类型与领域事实
 
-「ECS 放弃对象」不等于放弃建模。它要求你用小类型和组合来表达模型，而不是把变化原因绑死在一个巨型 struct 中。
+「玩家」不是一个必须装下所有字段的大结构体。Rust 的小类型让 ECS 的事实边界可见，也让错误更早暴露。
 
-## 本章 Rust 地图
+## 本章唯一主题
 
-| Bevy 表面 | Rust 构造 | 设计含义 |
-| --- | --- | --- |
-| `struct Position(Vec2)` | Newtype pattern | 为坐标赋予位置语义，避免裸 `Vec2` 混用 |
-| `struct Player;` | 零大小 marker type | 用类型表达阵营或角色分类 |
-| `Query<(&mut Position, &Velocity)>` | 元组、可变借用与解构 | 只给规则需要的最小数据集合 |
-| `#[derive(Component)]` | derive macro | 将普通 Rust 数据纳入 World 存储 |
-| `#[cfg(test)]` | 条件编译 | 测试代码不进入发布构建 |
-
-## Newtype 防止语义漂移
-
-`Position(Vec2)` 与 `Velocity(Vec2)` 的底层数据都是 `Vec2`，语义却完全不同。若函数直接接受两个 `Vec2`，参数位置写反仍可能编译；newtype 让这种错误在类型检查阶段暴露。
+用结构体和元组新类型为不同领域量命名。
 
 ```rust
+#[derive(Component)]
 struct Position(Vec2);
+
+#[derive(Component)]
 struct Velocity(Vec2);
+
+#[derive(Component)]
+struct Health(u16);
 ```
 
-这是一项廉价的领域建模技术。为真实不同的概念建立不同类型，别让「恰好都是两个 f32」替代语义。
+- `Position(Vec2)` 与裸 `Vec2` 的内存成本相近，却能阻止把速度误当位置传递。
+- 字段私有时，模块可保证不变量；需要读写时再提供方法。
+- Component 应描述稳定事实。一次碰撞的结果、全局难度或临时局部变量各有更合适的承载位置。
 
-## 元组查询是局部组合
+## 设计用法
 
-`Query<(&mut Position, &Velocity)>` 并没有创建临时「可移动对象」。它对每个匹配实体借出两个字段，并通过元组解构交给 System。规则只看见位置和速度，因此不会意外依赖名称、阵营或生命值。
+先为游戏中的名词建类型，再决定实体拥有哪些组件。新类型不是形式主义：它把「这个数值代表什么」交给编译器检查。
 
-这种参数级组合比在 `Player` 上堆方法更稳健：投射物加入同样两个 Component 后，自动复用移动规则。
+本章只解决数据命名与归属；下一章才讨论多个系统同时访问这些类型的规则。
 
-## 测试依赖状态，而非画面
+## 练习
 
-```rust
-assert_eq!(app.world().get::<Position>(moving_entity).unwrap().0, Vec2::new(6.0, 2.0));
-```
-
-测试直接构建输入 World，执行一次更新，断言输出 World。它没有启动窗口，也不关心渲染帧率。这正是 Rust 测试的优势：将规则写成可注入依赖的纯数据变换，测试速度和错误定位都会改善。
-
-`#[cfg(test)]` 让测试模块只在 `cargo test` 构建，避免示例二进制携带仅用于断言的代码。
-
-## 小练习
-
-为 `Health(u32)` 添加 `fn is_dead(&self) -> bool`。不要在它内部 despawn 实体：该方法只负责局部事实判断，生命周期副作用仍由 System 与 `Commands` 协调。
-
-## 延伸阅读
-
-- [Rust API Guidelines：Newtype](https://rust-lang.github.io/api-guidelines/type-safety.html)
-- [Rust Book：测试](https://doc.rust-lang.org/book/ch11-00-testing.html)
-- [Rust Reference：条件编译](https://doc.rust-lang.org/reference/conditional-compilation.html)
+将一个 `f32` 生命值改为 `Health(u16)`，只通过 `Health::take` 修改它，并在方法内保证结果不小于零。

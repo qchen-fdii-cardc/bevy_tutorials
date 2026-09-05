@@ -1,140 +1,135 @@
-# Bevy 教程 00：Bevy 不是引擎黑箱：一个 `App` 如何开始运行
+# Bevy 教程 00：App Runtime：启动顺序、Update 与调度边界
 
-「`App::new()` 后面接几行链式调用」不叫理解 Bevy；那只是在 Rust 里背下了一段启动咒语。
+从最小的 Bevy App 骨架出发，解释启动期、更新期、资源和系统是如何被组织起来的。
 
 ## 省流版
 
-- `App` 保存游戏运行时的结构：插件、世界、资源、系统与调度表都在这里汇合。
-- `DefaultPlugins` 提供窗口、渲染、输入、时间等默认能力；删掉它，示例没有理由凭空获得窗口和 2D 相机。
-- `Startup` 适合执行一次性初始化；`Update` 每帧执行。把两者混在一起，生命周期就开始发臭。
-- `Resource` 存放跨实体共享的状态。这里的 `RuntimeStats` 记录运行时间和帧数，并每秒输出一次日志。
-- Gizmos 是低成本的可观测性工具。先看见坐标轴和跳动圆环，再相信系统真的在调度；肉眼观察不是单元测试，但比闭眼敲 API 强得多。（确信
+- App 是世界状态和调度器的总入口，StartUp 与 Update 并非同一层语义。
+- 系统不是“随手函数”，而是对世界状态进行读取与写回的边界。
+- 明白调度顺序，才能看懂为什么某些资源先初始化，某些逻辑在固定时步内稳定。
+- 一开始最重要的不是炫技，而是把“什么时候发生什么”说清楚。
+
+
+
+<details>
+<summary>展开查看 <code>src/main.rs</code></summary>
+
+```{literalinclude} src/main.rs
+:language: rust
+:caption: src/main.rs
+:linenos:
+```
+
+</details>
 
 ## 运行方式
 
 在本目录执行：
 
 ```powershell
+cargo fmt --check
+cargo clippy --all-targets -- -D warnings
+cargo test
 cargo run
 ```
 
-会出现一个窗口：绿色横轴、红色纵轴和一个随时间呼吸的白色圆环。终端会每秒输出一次 `RuntimeStats`。关闭窗口即可结束程序。
+这里的目标不是追求“代码看起来很长”，而是让每条逻辑都是可证明、可重用、可复查的。Bevy 的价值不是单个 API，而是这些系统之间的边界如何被摆放。
 
-本章的验证命令：
+## 问题模型
 
-```powershell
-cargo fmt --check
-cargo clippy --all-targets -- -D warnings
-cargo check
-```
+- 这节课真正试图解决什么问题？
+- 这条系统属于哪一类状态：Component、Resource、Event、State，还是命令队列？
+- 哪些信息真实写进了 `World`，哪些只是局部变量？
+- 如果它在下一帧失灵，最可能出在哪一层：输入层、逻辑层、显示层，还是状态层？
 
-## 项目与源码
+对任何游戏工程来说，第一步都不是“先实现功能”，而是「先把事实写清楚」。本章的意义恰恰在于：告诉你当前世界中哪些东西是事实，哪些东西只是意图。
 
-<a href="https://github.com/qchen-fdii-cardc/bevy_tutorials">GitHub 仓库</a> · <a href="Cargo.toml">查看 <code>Cargo.toml</code></a> · <a href="src/main.rs">查看 <code>src/main.rs</code></a> · <a href="Rust_in_Bevy.md">查看 <code>Rust_in_Bevy.md</code></a>
+## 为什么它值得单独讲
 
-## 依赖配置
+很多人会以为游戏开发是把一串代码堆起来，其实真正决定产品质量的是状态归属和调度顺序。一个看起来可运行的系统，如果没有说明自己的输入和输出，就很难被测试、很难被复用，也很难被调整。
 
-本章没有使用 `bevy = "0.19.1"` 的完整默认 feature 集，而是固定为：
+这节的重点，往往不是“代码多长”，而是“这条逻辑到底在什么层面上表达”。你可以把它理解成：ECS 并不是让你在每个函数里同时处理一切，而是让你把世界切成一系列可验证的事实。
 
-```toml
-bevy = { version = "0.19.1", default-features = false, features = ["default_app", "default_platform", "2d_bevy_render"] }
-```
+比如，Bevy 教程 00：App Runtime：启动顺序、Update 与调度边界 这种主题，常见错误是把状态和行为捆在一起：一个结构体里混着输入、输出、生命周期和显示状态；或者把世界的变化用 `if` 穿成一大串，不再界定系统边界。这会让调试越来越难，因为你无法知道“哪条规则写进了什么”。
 
-`default_app` 提供 `App`、日志、资产与状态等基础运行时；`default_platform` 提供窗口、键盘和平台事件循环；`2d_bevy_render` 提供 `Camera2d`、2D 渲染与 Gizmos。本章不使用 3D PBR、GLTF、UI、音频、场景序列化或 picking，因此不编译它们。仓库根目录的 `.cargo/config.toml` 将所有独立章节的构建工件放在共享 `target` 目录，后续章节复用相同 feature 集的依赖缓存。
+## 状态归属清单
 
-## 先把运行时拆开
+- 这条逻辑是否真正产生了世界状态？
+- 哪些数据属于实体本身，哪些数据属于共享资源？
+- 它依赖的系统顺序是否被写清楚了？
+- 如果回滚到上一帧，哪些事实能被准确重建？
 
-任何可运行的 Bevy 程序都可以先压缩成下面这张图：
+## 最小实验
 
-```text
-App
- |- Plugins: 提供窗口、渲染、时间等基础能力
- |- World: 保存 Entity、Component 和 Resource
- |- Schedules: 决定 System 何时执行
- `- Systems: 读取并修改 World 中的状态
-```
-
-`App` 没有神秘魔法。它本质上是在组装运行时：先注册能力和数据，再告诉调度器「哪些函数应在哪个阶段运行」，最后进入事件循环。窗口事件到来后，Bevy 推进时间、收集输入、执行系统、准备渲染并提交画面；这是一条数据流，不是一台藏在宏背后的黑箱。
-
-> 学习 Bevy 的第一条纪律：**每次新增 API 调用，都要回答它是在添加能力、添加状态，还是添加状态变换规则。**
->
-> `add_plugins` 添加能力，`insert_resource` 添加状态，`add_systems` 添加规则。连这个分类都无法完成时，教程进度条只是认知负荷的装饰品。
-
-## 代码逐段解剖
-
-以下内容以本目录的 [`src/main.rs`](src/main.rs) 为准，适用于 Bevy `0.19.1`。
+一个游戏系统最好的测试方式，不是截图，而是把世界状态从 `App` 里观察出来。下面以最小示例为例：
 
 ```rust
-App::new()
-    .insert_resource(RuntimeStats::default())
-    .add_plugins(DefaultPlugins)
-    .add_systems(Startup, setup)
-    .add_systems(Update, (advance_runtime, draw_debug_axes).chain())
-    .run();
+let mut app = App::new();
+app.add_systems(Startup, setup);
+app.add_systems(Update, tick);
+app.update();
 ```
 
-这五行分别在做五件可验证的事：
+这里的代码不追求华丽，它追求的恰恰是：
 
-1. `App::new()` 创建空的应用容器。
-2. `insert_resource` 将唯一的 `RuntimeStats` 放进 World。
-3. `DefaultPlugins` 注册窗口、渲染、时间和输入等默认插件集合。
-4. `setup` 被安排到 `Startup`，只初始化一次；`advance_runtime` 与 `draw_debug_axes` 被安排到每帧运行的 `Update`。
-5. `run` 取得控制权并进入平台事件循环；它之后的普通 Rust 语句不会执行。
+- 输入和输出清晰；
+- 运行时机明确；
+- 需要的状态边界可被描述；
+- 后续扩展时不需要重写所有逻辑。
 
-`RuntimeStats` 标注 `#[derive(Resource)]`。这个标记不是装饰，它告诉 Bevy：该类型以单例形式存于 World，可由系统通过 `Res<T>` 读取、通过 `ResMut<T>` 修改。时间 `Time` 同样是一个由引擎维护的 Resource，因此 `advance_runtime` 的签名已经把依赖关系写得很直白：读取时间，写入统计数据。
+如果你在一开始就把所有动作塞进同一个 `update` 里，后面每增加一个功能都要反复回到同一段逻辑。ECS 的目的是把这条泥潭拆成多块可控的状态变化。
 
-```rust
-fn advance_runtime(time: Res<Time>, mut stats: ResMut<RuntimeStats>)
-```
+## 常见故障
 
-这里有一个需要立刻建立的边界：`Time` 表示真实帧间隔，适合视觉动画、UI 和输入采样。需要确定性规则的移动、碰撞和战斗逻辑，应在之后的 `FixedUpdate` 学习；把物理规则绑死在屏幕刷新频率上，30 FPS 与 144 FPS 用户会玩到两个不同游戏。
+1. 把所有状态都堆进一个结构体，然后让各个系统直接互相读改。
+2. 把混在一起的行为当成单一逻辑，例如“移动 + 碰撞 + 反馈 + 杀死敌人”一条系统写完。
+3. 只看视觉，不断言真实的 `World` 状态。
+4. 把“正在发生”与“已经发生”混在一起，导致同一帧里状态被重复改写。
+5. 将 `Run Condition` 和 `State` 误当成同一件事，造成门控逻辑和流程逻辑混合。
 
-## `Startup` 和 `Update` 不是两个随便挑的标签
+这些问题都不是语法错误，而是设计边界错误。Bevy 不会因为代码“能跑”就证明你的设计合理；它要求你反复证明状态和调度确实符合预期。
 
-`setup` 生成 `Camera2d`，所以它属于 `Startup`。每帧创建一个相机等于不断向 World 塞入新的视角实体，常见症状是画面、性能和调试信息一起失控。一次性创建资源、相机、初始地图和初始 UI，通常从 `Startup` 开始检查。
+## 工程上的真实意义
 
-`advance_runtime` 累积 `delta_secs()`，`draw_debug_axes` 根据已累积时间计算圆环半径，因此两者必须按此顺序执行：
+对一个成熟项目来说，状态设计决定的是长期维护成本，而不是一时的“功能完成度”。你可以把很多看起来像复杂功能的设计缩小成：一个状态被谁写入，一个输出被谁读取，一个系统是否有清晰依赖。熟练的工程师不是把大块代码塞进去，而是先减少混乱，再逐步把规则写清楚。
 
-```rust
-(advance_runtime, draw_debug_axes).chain()
-```
-
-`chain()` 将两个系统串成明确顺序。它没有让代码「更优雅」，它是在声明真实的数据依赖：先写 `RuntimeStats`，再读 `RuntimeStats`。当系统关系还没有数据依赖时，不要迷信全局排序；让 Bevy 并行调度独立系统，才是 ECS 的正常打开方式。
-
-## 故障注入：删掉一行，看看你到底懂了什么
-
-请依次做下面三个实验，每次只改一处，再运行 `cargo run`：
-
-1. 删除 `.add_plugins(DefaultPlugins)`：程序失去窗口、时间与渲染相关能力，编译或运行行为会立刻揭露这些能力原先从哪里来。
-2. 将 `setup` 放到 `Update`：每帧生成一台 `Camera2d`。用日志或实体检查工具确认实体数量持续增长，然后将它放回 `Startup`。
-3. 删除 `.chain()`：圆环仍可能看起来正常，因为 Bevy 可自行安排读取与写入冲突；这正是危险之处。当前逻辑存在顺序依赖，文章不能靠「大部分时间看起来没问题」给错误设计开绿灯。
-
-第三个实验的结论很冷：画面偶然正确不构成架构正确。调度问题一旦混入复杂玩法，会以偶发、平台相关、难以复现的方式收债。
+当游戏越来越大时，所谓的“难点”通常并不是一条算法写不出来，而是不同系统之间在同一帧里相互覆盖状态。你至少需要知道，当前系统的输入来自哪里，输出写回哪里，是否与另一条系统发生冲突。这些问题，真正的答案往往在 `Query`、`Resource`、`Event` 和 `State` 的边界里。
 
 ## 本章练习
 
-将 `RuntimeStats` 扩展为一个真正可观察的小实验：
-
-- 记录最近一秒的帧数，并计算近似 FPS。
-- 在圆环上增加一个沿 X 轴往复运动的点；点的位置必须由 Resource 中的时间推导，不能偷塞进全局 `static`。
-- 新增 `Paused` Resource，并用键盘切换它；暂停时统计数据不再累积，Gizmos 仍绘制坐标轴。
-
-练习完成后，回答一个问题：暂停状态属于单个实体，还是属于整个游戏世界？如果答案没有落到 Resource、Component 或 Event 的具体选择上，说明状态归属仍是模糊的。
+1. 用更小的 `Component` 代替“万能结构体”，说明每个事实对应哪个字段。
+2. 设计一个最小测试，断言世界状态在一帧内发生了什么变化，而不是依赖 `println!`。
+3. 把典型逻辑拆成两个 System：一个负责收集事实，一个负责更新状态。看看职责边界是否变得更清晰。
+4. 把“输入层”与“逻辑层”分开，问自己：你的代码到底是在接收设备事件，还是在表达游戏动作？
+5. 选一个最容易被误判的状态，写出两个新系统：一个读取它，一个写回它。看是否更容易定位错误。
+6. 若你想引入一条新规则，先判断它属于“系统输入调度”的调整，还是“状态事实”的新增，还是“反馈层”的展示。
+7. 尝试在一条日志中同时输出当前状态和调用栈，这样你会更容易发现错误属于边界问题还是逻辑问题。
 
 ## 下一章
 
-下一篇将处理插件、资源与系统的组合边界：如何把一个功能做成可插拔模块，又不把全局状态散落成难以追踪的隐式依赖。到那时，`App` 才会从启动代码变成可维护项目的装配点。
+下一章会把焦点转向插件和资源：Bevy 的模块化不是靠大工程，而是靠小而清晰的边界组合。
 
 ## 延伸阅读
 
-- [Bevy 官方文档：Learn](https://bevy.org/learn/)
-- [Bevy `0.19.1`：`App`](https://docs.rs/bevy/0.19.1/bevy/prelude/struct.App.html)
-- [Bevy `0.19.1`：`Resource`](https://docs.rs/bevy/0.19.1/bevy/ecs/resource/trait.Resource.html)
-- [Bevy 官方示例：Gizmos](https://bevy.org/examples/gizmos/2d-gizmos/)
-- [Bevy 迁移指南](https://bevy.org/learn/migration-guides/)
+- [Bevy 官方文档](https://bevy.org/learn/)
+- [Bevy `0.19.1` API 文档](https://docs.rs/bevy/0.19.1/bevy/)
+- [Bevy 官方示例索引](https://bevy.org/examples/)
+- [Rust Book](https://doc.rust-lang.org/book/)
 
 <a id="rust-in-bevy"></a>
 
 ```{include} Rust_in_Bevy.md
 :heading-offset: 1
 ```
+
+## 这章最值得反复检查
+
+- 你是否能把 `App`、`World` 和 `Schedule` 说成三个不同层次的“事实来源”？
+- 如果一个系统看起来没执行，问题是在启动顺序、资源状态，还是边界定义上？
+- 你能否用一条日志解释“当前帧的状态 + 改变来源”，而不只记住 API 名称？
+
+## 这章的判断标准
+
+真正的 ECS 设计，不是“能不能让效果出现”，而是“状态来源是否清楚、边界是否稳定、修改顺序是否可解释”。
+
+如果一条系统看起来无效，优先问的是：它读到的事实是谁？它写回的状态是什么？它是否被放在正确的时序层。把这些问题说清楚，比堆一大段抽象原则更有建设性。

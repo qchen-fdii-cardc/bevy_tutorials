@@ -1,107 +1,134 @@
-# Bevy 教程 03：实体没有行为：ECS 中的身份、事实与规则
+# Bevy 教程 03：ECS Data Model：把事实拆成 Component 与 Entity
 
-「给 `Player` 塞一个万能 struct」不会让对象更完整；它只会让每项新规则都去改同一个状态垃圾场。
+讲述实体、组件、世界的关系，以及为什么“一个函数里塞很多字段”不如“按事实分散”。
 
 ## 省流版
 
-- `Entity` 只是稳定身份，不携带 Rust 方法和继承层级；`Component` 才是关于该身份的事实。
-- `Position` 与 `Velocity` 可以组合在玩家、敌人、投射物或任何新实体上。移动规则只查询这两个事实，不关心标签。
-- `Player`、`Enemy` 是零大小的标记 Component。它们表达分类，不能替代位置、速度、生命值等独立事实。
-- `System` 是对匹配数据集合的变换规则。本章的 `move_entities` 只会移动同时拥有 `Position` 与 `Velocity` 的实体。
-- Unit test 直接构造 World、运行一次 `Update`，并证明静止实体没有被移动。可测试的数据边界，比「对象看起来很面向对象」有用得多。
+- 实体是身份，组件是事实。
+- 尽量让每个组件表达单一事实，而不是打包复合状态。
+- 世界是所有实体与共享资源的集合。
+- ECS 的力量来自组合，而不是继承。
+
+
+
+<details>
+<summary>展开查看 <code>src/main.rs</code></summary>
+
+```{literalinclude} src/main.rs
+:language: rust
+:caption: src/main.rs
+:linenos:
+```
+
+</details>
 
 ## 运行方式
 
 在本目录执行：
 
 ```powershell
-cargo run
+cargo fmt --check
+cargo clippy --all-targets -- -D warnings
 cargo test
+cargo run
 ```
 
-程序不创建窗口。它在内存中生成玩家和敌人，推进一次模拟，然后打印各自位置。这个刻意贫瘠的实验删除了渲染、输入和时间，留下 ECS 的因果链。
+这里的目标不是追求“代码看起来很长”，而是让每条逻辑都是可证明、可重用、可复查的。Bevy 的价值不是单个 API，而是这些系统之间的边界如何被摆放。
 
-## 项目与源码
+## 问题模型
 
-<a href="https://github.com/qchen-fdii-cardc/bevy_tutorials">GitHub 仓库</a> · <a href="Cargo.toml">查看 <code>Cargo.toml</code></a> · <a href="src/main.rs">查看 <code>src/main.rs</code></a> · <a href="Rust_in_Bevy.md">查看 <code>Rust_in_Bevy.md</code></a>
+- 这节课真正试图解决什么问题？
+- 这条系统属于哪一类状态：Component、Resource、Event、State，还是命令队列？
+- 哪些信息真实写进了 `World`，哪些只是局部变量？
+- 如果它在下一帧失灵，最可能出在哪一层：输入层、逻辑层、显示层，还是状态层？
 
-## 依赖配置
+对任何游戏工程来说，第一步都不是“先实现功能”，而是「先把事实写清楚」。本章的意义恰恰在于：告诉你当前世界中哪些东西是事实，哪些东西只是意图。
 
-本章是纯 ECS 实验，依赖配置因此更小：
+## 为什么它值得单独讲
 
-```toml
-bevy = { version = "0.19.1", default-features = false }
-```
+很多人会以为游戏开发是把一串代码堆起来，其实真正决定产品质量的是状态归属和调度顺序。一个看起来可运行的系统，如果没有说明自己的输入和输出，就很难被测试、很难被复用，也很难被调整。
 
-`App`、World、Entity、Component、Query、Resource 与 `Vec2` 均可在此配置下使用。窗口、渲染、输入、音频、UI、资产加载和 Gizmos 都不属于本章因果链，因此全部排除。只测试数据变换时，先把图形运行时移出依赖图，错误定位和编译速度都会变得更诚实。
+这节的重点，往往不是“代码多长”，而是“这条逻辑到底在什么层面上表达”。你可以把它理解成：ECS 并不是让你在每个函数里同时处理一切，而是让你把世界切成一系列可验证的事实。
 
-## 一个身份，多个事实
+比如，Bevy 教程 03：ECS Data Model：把事实拆成 Component 与 Entity 这种主题，常见错误是把状态和行为捆在一起：一个结构体里混着输入、输出、生命周期和显示状态；或者把世界的变化用 `if` 穿成一大串，不再界定系统边界。这会让调试越来越难，因为你无法知道“哪条规则写进了什么”。
 
-[`src/main.rs`](src/main.rs) 的玩家由四个 Component 组成：
+## 状态归属清单
+
+- 这条逻辑是否真正产生了世界状态？
+- 哪些数据属于实体本身，哪些数据属于共享资源？
+- 它依赖的系统顺序是否被写清楚了？
+- 如果回滚到上一帧，哪些事实能被准确重建？
+
+## 最小实验
+
+一个游戏系统最好的测试方式，不是截图，而是把世界状态从 `App` 里观察出来。下面以最小示例为例：
 
 ```rust
-commands.spawn((
-    Name("player"),
-    Player,
-    Position(Vec2::ZERO),
-    Velocity(Vec2::new(3.0, 0.0)),
-));
+#[derive(Component)] struct Position(Vec2);
+#[derive(Component)] struct Velocity(Vec2);
+let id = commands.spawn((Position::default(), Velocity::default())).id();
 ```
 
-这里并没有 `Player::update()`。同一个实体拥有一个 `Entity` ID，World 用该 ID 把 `Name`、`Player`、`Position` 和 `Velocity` 关联起来。敌人换了 `Enemy` 标签和初始数据，却复用完全相同的位置与速度事实。
+这里的代码不追求华丽，它追求的恰恰是：
 
-> ECS 的第一个约束是：**先问某条数据是否独立变化，再决定它是否应成为 Component。**
->
-> 「所有玩家都有」不是理由；「移动规则需要独立读取和写入它」才是理由。
+- 输入和输出清晰；
+- 运行时机明确；
+- 需要的状态边界可被描述；
+- 后续扩展时不需要重写所有逻辑。
 
-## System 不服务对象，它服务查询
+如果你在一开始就把所有动作塞进同一个 `update` 里，后面每增加一个功能都要反复回到同一段逻辑。ECS 的目的是把这条泥潭拆成多块可控的状态变化。
 
-```rust
-fn move_entities(
-    mut movers: Query<(&mut Position, &Velocity)>,
-) {
-    for (mut position, velocity) in &mut movers {
-        position.0 += velocity.0;
-    }
-}
-```
+## 常见故障
 
-这个 System 选择的是拥有 `Position` 和 `Velocity` 的实体集合。它不会移动只有 `Position` 的静态装饰物，也不需要为玩家和敌人各复制一份移动逻辑。新类型只要组合相同事实就自动进入规则范围。
+1. 把所有状态都堆进一个结构体，然后让各个系统直接互相读改。
+2. 把混在一起的行为当成单一逻辑，例如“移动 + 碰撞 + 反馈 + 杀死敌人”一条系统写完。
+3. 只看视觉，不断言真实的 `World` 状态。
+4. 把“正在发生”与“已经发生”混在一起，导致同一帧里状态被重复改写。
+5. 将 `Run Condition` 和 `State` 误当成同一件事，造成门控逻辑和流程逻辑混合。
 
-`SimulationStep` 是 Resource，因为整个模拟共享唯一的步数。它和实体位置的归属不同：位置属于一个实体，步数属于整个 World。把两者都塞进 `Player`，只是把状态所有权说反了。
+这些问题都不是语法错误，而是设计边界错误。Bevy 不会因为代码“能跑”就证明你的设计合理；它要求你反复证明状态和调度确实符合预期。
 
-## 自动测试就是最小实验
+## 工程上的真实意义
 
-测试创建一个可移动实体和一个只有 `Position` 的静止实体，执行 `app.update()`，验证前者位置变为 `(6, 2)`，后者仍为 `(7, 8)`。这个断言验证的是查询边界正确，不是 `Vec2` 加法本身。
+对一个成熟项目来说，状态设计决定的是长期维护成本，而不是一时的“功能完成度”。你可以把很多看起来像复杂功能的设计缩小成：一个状态被谁写入，一个输出被谁读取，一个系统是否有清晰依赖。熟练的工程师不是把大块代码塞进去，而是先减少混乱，再逐步把规则写清楚。
 
-当玩法规则复杂起来，优先测试 System 的输入状态和输出状态。窗口截图最多证明某一帧看起来像对的；World 断言可以证明哪个事实被谁改变。
-
-## 故障注入
-
-1. 从玩家移除 `Velocity`。再次运行后，玩家不再移动，敌人仍移动。规则由 Component 组合决定。
-2. 将 `Enemy` 加到玩家实体。移动结果不变，因为 `move_entities` 根本不读取这个标签。标签不是行为。
-3. 在查询中错误加入 `With<Player>`。敌人停止移动，代码仍能编译；你把可复用规则收窄成玩家特权，这就是数据模型的回归。
-4. 把 `SimulationStep` 改为 Component 并加到玩家。多玩家出现后你必须决定读哪一个步数。它原本是共享状态，Resource 才是正确归属。
+当游戏越来越大时，所谓的“难点”通常并不是一条算法写不出来，而是不同系统之间在同一帧里相互覆盖状态。你至少需要知道，当前系统的输入来自哪里，输出写回哪里，是否与另一条系统发生冲突。这些问题，真正的答案往往在 `Query`、`Resource`、`Event` 和 `State` 的边界里。
 
 ## 本章练习
 
-1. 添加 `Health(u32)`，让玩家和敌人都具有生命值，但不要让移动系统读取它。
-2. 添加 `Projectile` 标记和一个投射物实体，验证它无需新移动 System 就会移动。
-3. 写一个测试，证明只有拥有 `Health` 的实体会被「受伤」规则修改。
+1. 用更小的 `Component` 代替“万能结构体”，说明每个事实对应哪个字段。
+2. 设计一个最小测试，断言世界状态在一帧内发生了什么变化，而不是依赖 `println!`。
+3. 把典型逻辑拆成两个 System：一个负责收集事实，一个负责更新状态。看看职责边界是否变得更清晰。
+4. 把“输入层”与“逻辑层”分开，问自己：你的代码到底是在接收设备事件，还是在表达游戏动作？
+5. 选一个最容易被误判的状态，写出两个新系统：一个读取它，一个写回它。看是否更容易定位错误。
+6. 若你想引入一条新规则，先判断它属于“系统输入调度”的调整，还是“状态事实”的新增，还是“反馈层”的展示。
+7. 尝试在一条日志中同时输出当前状态和调用栈，这样你会更容易发现错误属于边界问题还是逻辑问题。
 
 ## 下一章
 
-下一篇处理 `Query` 的读取、写入与冲突：当两个 System 都想修改相同 Component，Bevy 和 Rust 正在阻止哪一种真实的数据竞争。
+下一章会开始具体看查询和访问：为什么一个 System 不能随便同时写和读同一条数据。
 
 ## 延伸阅读
 
-- [Bevy `0.19.1`：Entity](https://docs.rs/bevy/0.19.1/bevy/ecs/entity/struct.Entity.html)
-- [Bevy `0.19.1`：Component](https://docs.rs/bevy/0.19.1/bevy/ecs/component/trait.Component.html)
-- [Bevy `0.19.1`：Query](https://docs.rs/bevy/0.19.1/bevy/ecs/system/struct.Query.html)
-- [Bevy 官方 ECS 示例](https://bevy.org/examples/ecs-entity-component-system/)
+- [Bevy 官方文档](https://bevy.org/learn/)
+- [Bevy `0.19.1` API 文档](https://docs.rs/bevy/0.19.1/bevy/)
+- [Bevy 官方示例索引](https://bevy.org/examples/)
+- [Rust Book](https://doc.rust-lang.org/book/)
 
 <a id="rust-in-bevy"></a>
 
 ```{include} Rust_in_Bevy.md
 :heading-offset: 1
 ```
+
+## 这章最值得反复检查
+
+- 你是否能用一段话说明每个组件代表什么事实，而不是“装了哪些字段”？
+- 实体、组件和系统的职责边界是否足够清晰？
+- 当你想新增一条规则时，是否先决定它属于数据事实、系统行为还是表现层？
+
+## 这章的判断标准
+
+真正的 ECS 设计，不是“能不能让效果出现”，而是“状态来源是否清楚、边界是否稳定、修改顺序是否可解释”。
+
+如果一条系统看起来无效，优先问的是：它读到的事实是谁？它写回的状态是什么？它是否被放在正确的时序层。把这些问题说清楚，比堆一大段抽象原则更有建设性。
