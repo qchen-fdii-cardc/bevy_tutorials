@@ -28,3 +28,13 @@ html_theme_options = {
 		}
 	],
 }
+
+latex_engine = "xelatex"
+latex_elements = {
+    "preamble": r"""
+\usepackage{fontspec}
+\usepackage{xeCJK}
+\setmainfont{TeX Gyre Termes}
+\setCJKmainfont{Microsoft YaHei}
+""",
+}

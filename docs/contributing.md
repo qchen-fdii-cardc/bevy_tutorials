@@ -15,4 +15,12 @@
 docs\.venv\Scripts\python.exe docs\build.py
 ```
 
+生成中文 PDF：
+
+```powershell
+docs\.venv\Scripts\python.exe docs\build.py --pdf
+```
+
+PDF 输出在 `docs/_build/latex/`，HTML 输出仍在 `docs/_build/html/`。PDF 构建使用已安装的 XeLaTeX 和系统字体 `Microsoft YaHei`。
+
 生成的网站在 `docs/_build/html/index.html`。发布后，源代码也位于站点根目录的对应 Cargo 目录，可从教程页面的源码链接直接打开。
