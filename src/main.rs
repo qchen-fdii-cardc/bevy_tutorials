@@ -4,9 +4,7 @@ use std::path::{Path, PathBuf};
 use bevy::audio::{AudioPlayer, AudioSource, PlaybackSettings};
 use bevy::prelude::*;
 use bevy::ui::widget::Text;
-use bevy::ui::{
-    AlignItems, Display, FlexDirection, JustifyContent, Node, UiRect, Val,
-};
+use bevy::ui::{AlignItems, Display, FlexDirection, JustifyContent, Node, UiRect, Val};
 use image::{ImageBuffer, Rgba};
 use rand::Rng;
 
@@ -15,6 +13,9 @@ const HALF_HEIGHT: f32 = 240.0;
 const PLAYER_SPEED: f32 = 220.0;
 const ENEMY_SPEED: f32 = 80.0;
 const PICKUP_RADIUS: f32 = 18.0;
+const FLOCK_SEPARATION_RADIUS: f32 = 46.0;
+const FLOCK_SEPARATION_WEIGHT: f32 = 2.2;
+const FLOCK_WANDER_WEIGHT: f32 = 0.55;
 
 #[derive(States, Default, Debug, Clone, Eq, PartialEq, Hash)]
 enum GameState {
@@ -24,44 +25,18 @@ enum GameState {
     GameOver,
 }
 
-#[derive(Clone, Copy, Debug)]
-enum Language {
-    Zh,
-    En,
-}
-
 #[derive(Resource)]
 struct Settings {
     volume: f32,
-    language: Language,
 }
 
 impl Default for Settings {
     fn default() -> Self {
-        Self {
-            volume: 0.7,
-            language: Language::Zh,
-        }
+        Self { volume: 0.7 }
     }
 }
 
 impl Settings {
-    fn save(&self) -> std::io::Result<()> {
-        let path = settings_path();
-        let text = format!(
-            "volume={:.2}\nlanguage={}\n",
-            self.volume,
-            match self.language {
-                Language::Zh => "zh",
-                Language::En => "en",
-            }
-        );
-        if let Some(parent) = path.parent() {
-            fs::create_dir_all(parent)?;
-        }
-        fs::write(path, text)
-    }
-
     fn load() -> Self {
         let mut settings = Self::default();
         let path = settings_path();
@@ -70,17 +45,8 @@ impl Settings {
                 let mut items = line.splitn(2, '=');
                 let key = items.next();
                 let value = items.next();
-                match (key, value) {
-                    (Some("volume"), Some(raw)) => {
-                        settings.volume = raw.parse::<f32>().unwrap_or(settings.volume);
-                    }
-                    (Some("language"), Some(raw)) => {
-                        settings.language = match raw {
-                            "en" => Language::En,
-                            _ => Language::Zh,
-                        };
-                    }
-                    _ => {}
+                if let (Some("volume"), Some(raw)) = (key, value) {
+                    settings.volume = raw.parse::<f32>().unwrap_or(settings.volume);
                 }
             }
         }
@@ -120,9 +86,8 @@ struct GameAssets {
     player: Handle<Image>,
     enemy: Handle<Image>,
     crystal: Handle<Image>,
-    background: Handle<Image>,
-    pickup: Handle<AudioSource>,
     hit: Handle<AudioSource>,
+    pickup: Handle<AudioSource>,
 }
 
 #[derive(Component)]
@@ -153,9 +118,31 @@ struct Velocity {
 }
 
 #[derive(Component)]
-struct Collider {
-    radius: f32,
+struct Collider;
+
+#[derive(Component)]
+struct FlockWander {
+    phase: f32,
+    turn_rate: f32,
 }
+
+type ResettableEntities<'w, 's> =
+    Query<'w, 's, Entity, Or<(With<Player>, With<Enemy>, With<Crystal>, With<Background>)>>;
+type BoundedTransforms<'w, 's> =
+    Query<'w, 's, &'static mut Transform, Or<(With<Player>, With<Enemy>)>>;
+type EnemyMovers<'w, 's> = Query<
+    'w,
+    's,
+    (
+        &'static mut Transform,
+        &'static mut Velocity,
+        &'static mut FlockWander,
+    ),
+    (With<Enemy>, Without<Player>),
+>;
+type EnemyPositions<'w, 's> = Query<'w, 's, &'static Transform, With<Enemy>>;
+type EnemyTransforms<'w, 's> =
+    Query<'w, 's, (Entity, &'static Transform), (With<Enemy>, Without<Player>)>;
 
 fn main() {
     App::new()
@@ -164,24 +151,30 @@ fn main() {
         .insert_resource(Settings::load())
         .insert_resource(GameSession::default())
         .add_systems(Startup, setup_game)
-        .add_systems(OnEnter(GameState::Menu), spawn_menu_ui)
         .add_systems(OnEnter(GameState::Playing), reset_game)
-        .add_systems(Update, (
-            handle_menu_input,
-            handle_game_over_input,
-            update_hud,
-            camera_follow,
-            toggle_language,
-            apply_game_state,
-        ).chain())
-        .add_systems(FixedUpdate, (
-            player_move,
-            enemy_ai,
-            crystal_pickup,
-            enemy_damage,
-            spawn_wave,
-            keep_in_bounds,
-        ).chain())
+        .add_systems(
+            Update,
+            (
+                handle_menu_input,
+                handle_game_over_input,
+                update_hud,
+                camera_follow,
+                apply_game_state,
+            )
+                .chain(),
+        )
+        .add_systems(
+            FixedUpdate,
+            (
+                player_move,
+                enemy_ai,
+                crystal_pickup,
+                enemy_damage,
+                spawn_wave,
+                keep_in_bounds,
+            )
+                .chain(),
+        )
         .run();
 }
 
@@ -210,43 +203,45 @@ fn setup_game(
         player: asset_server.load("generated/player.png"),
         enemy: asset_server.load("generated/enemy.png"),
         crystal: asset_server.load("generated/crystal.png"),
-        background: asset_server.load("generated/background.png"),
-        pickup: asset_server.load("generated/pickup.wav"),
         hit: asset_server.load("generated/hit.wav"),
+        pickup: asset_server.load("generated/pickup.wav"),
     };
+    spawn_menu_entities(&mut commands, &assets);
     commands.insert_resource(assets);
 
-    commands.spawn((
-        HudRoot,
-        Node {
-            width: Val::Percent(100.0),
-            height: Val::Percent(100.0),
-            display: Display::Flex,
-            flex_direction: FlexDirection::Column,
-            justify_content: JustifyContent::FlexStart,
-            align_items: AlignItems::FlexStart,
-            padding: UiRect::all(Val::Px(20.0)),
-            ..default()
-        },
-    )).with_children(|parent| {
-        parent.spawn((
-            Text::new(""),
-            TextFont::from_font_size(30.0),
-            TextColor::WHITE,
-            ScoreText,
-        ));
-        parent.spawn((
-            Text::new(""),
-            TextFont::from_font_size(22.0),
-            TextColor(Color::srgba(0.9, 0.9, 0.8, 1.0)),
-            StateText,
-        ));
-    });
+    commands
+        .spawn((
+            HudRoot,
+            Node {
+                width: Val::Percent(100.0),
+                height: Val::Percent(100.0),
+                display: Display::Flex,
+                flex_direction: FlexDirection::Column,
+                justify_content: JustifyContent::FlexStart,
+                align_items: AlignItems::FlexStart,
+                padding: UiRect::all(Val::Px(20.0)),
+                ..default()
+            },
+        ))
+        .with_children(|parent| {
+            parent.spawn((
+                Text::new(""),
+                TextFont::from_font_size(30.0),
+                TextColor::WHITE,
+                ScoreText,
+            ));
+            parent.spawn((
+                Text::new(""),
+                TextFont::from_font_size(22.0),
+                TextColor(Color::srgba(0.9, 0.9, 0.8, 1.0)),
+                StateText,
+            ));
+        });
 
     let _ = (&mut meshes, &mut materials);
 }
 
-fn spawn_menu_ui(mut commands: Commands, assets: Res<GameAssets>) {
+fn spawn_menu_entities(commands: &mut Commands, assets: &GameAssets) {
     commands.spawn((
         Transform::from_xyz(-130.0, 40.0, 1.0).with_scale(Vec3::splat(2.0)),
         Sprite {
@@ -260,7 +255,6 @@ fn spawn_menu_ui(mut commands: Commands, assets: Res<GameAssets>) {
         Transform::from_xyz(130.0, -40.0, 1.0).with_scale(Vec3::splat(2.0)),
         Sprite {
             image: assets.enemy.clone(),
-            custom_size: Some(Vec2::new(40.0, 40.0)),
             ..default()
         },
         Enemy,
@@ -271,7 +265,7 @@ fn reset_game(
     mut commands: Commands,
     assets: Res<GameAssets>,
     mut session: ResMut<GameSession>,
-    entities: Query<Entity, Or<(With<Player>, With<Enemy>, With<Crystal>, With<Background>)>>,
+    entities: ResettableEntities,
 ) {
     session.score = 0;
     session.health = 5;
@@ -291,7 +285,7 @@ fn reset_game(
             ..default()
         },
         Player,
-        Collider { radius: 16.0 },
+        Collider,
         Velocity { x: 0.0, y: 0.0 },
     ));
     spawn_crystal(&mut commands, &assets, 160.0, 100.0);
@@ -311,11 +305,12 @@ fn spawn_crystal(commands: &mut Commands, assets: &Res<GameAssets>, x: f32, y: f
             ..default()
         },
         Crystal,
-        Collider { radius: PICKUP_RADIUS },
+        Collider,
     ));
 }
 
 fn spawn_enemy(commands: &mut Commands, assets: &Res<GameAssets>, x: f32, y: f32) {
+    let mut rng = rand::rng();
     commands.spawn((
         Transform::from_xyz(x, y, 1.0),
         Sprite {
@@ -324,8 +319,12 @@ fn spawn_enemy(commands: &mut Commands, assets: &Res<GameAssets>, x: f32, y: f32
             ..default()
         },
         Enemy,
-        Collider { radius: 14.0 },
+        Collider,
         Velocity { x: 0.0, y: 0.0 },
+        FlockWander {
+            phase: rng.random_range(0.0..std::f32::consts::TAU),
+            turn_rate: rng.random_range(0.65..1.25),
+        },
     ));
 }
 
@@ -346,19 +345,6 @@ fn handle_game_over_input(
 ) {
     if *state.get() == GameState::GameOver && keyboard.just_pressed(KeyCode::Enter) {
         next_state.set(GameState::Playing);
-    }
-}
-
-fn toggle_language(
-    keyboard: Res<ButtonInput<KeyCode>>,
-    mut settings: ResMut<Settings>,
-) {
-    if keyboard.just_pressed(KeyCode::KeyL) {
-        settings.language = match settings.language {
-            Language::Zh => Language::En,
-            Language::En => Language::Zh,
-        };
-        let _ = settings.save();
     }
 }
 
@@ -387,10 +373,12 @@ fn player_move(
         return;
     }
 
-    let move_x = (keyboard.pressed(KeyCode::KeyD) as i8 - keyboard.pressed(KeyCode::KeyA) as i8) as f32;
-    let move_y = (keyboard.pressed(KeyCode::KeyW) as i8 - keyboard.pressed(KeyCode::KeyS) as i8) as f32;
+    let move_x =
+        (keyboard.pressed(KeyCode::KeyD) as i8 - keyboard.pressed(KeyCode::KeyA) as i8) as f32;
+    let move_y =
+        (keyboard.pressed(KeyCode::KeyW) as i8 - keyboard.pressed(KeyCode::KeyS) as i8) as f32;
     let dir = Vec2::new(move_x, move_y);
-    let delta = time.delta_seconds_f64() as f32;
+    let delta = time.delta_secs_f64() as f32;
 
     for (mut transform, mut velocity) in &mut query {
         if dir.length_squared() > 0.0 {
@@ -409,7 +397,7 @@ fn player_move(
 fn enemy_ai(
     time: Res<Time>,
     state: Res<State<GameState>>,
-    mut enemy_query: Query<(&mut Transform, &mut Velocity), With<Enemy>>,
+    mut queries: ParamSet<(EnemyPositions, EnemyMovers)>,
     player_query: Query<&Transform, With<Player>>,
 ) {
     if *state.get() != GameState::Playing {
@@ -419,15 +407,38 @@ fn enemy_ai(
         return;
     };
     let player_pos = player.translation.truncate();
-    for (mut transform, mut velocity) in &mut enemy_query {
-        let to_player = player_pos - transform.translation.truncate();
-        let dist = to_player.length();
-        if dist > 0.001 {
-            let dir = to_player / dist;
-            velocity.x = dir.x * ENEMY_SPEED;
-            velocity.y = dir.y * ENEMY_SPEED;
-            transform.translation.x += dir.x * ENEMY_SPEED * time.delta_seconds_f64() as f32;
-            transform.translation.y += dir.y * ENEMY_SPEED * time.delta_seconds_f64() as f32;
+    let positions: Vec<Vec2> = queries
+        .p0()
+        .iter()
+        .map(|transform| transform.translation.truncate())
+        .collect();
+    let delta = time.delta_secs_f64() as f32;
+
+    for (mut transform, mut velocity, mut wander) in &mut queries.p1() {
+        let position = transform.translation.truncate();
+        let seek_direction = (player_pos - position).normalize_or_zero();
+        let mut separation = Vec2::ZERO;
+
+        for other_position in &positions {
+            let offset = position - *other_position;
+            let distance = offset.length();
+            if distance > 0.001 && distance < FLOCK_SEPARATION_RADIUS {
+                let strength = 1.0 - distance / FLOCK_SEPARATION_RADIUS;
+                separation += offset / distance * strength;
+            }
+        }
+
+        wander.phase = (wander.phase + wander.turn_rate * delta) % std::f32::consts::TAU;
+        let wander_direction = Vec2::new(wander.phase.cos(), wander.phase.sin());
+        let flock_direction = (seek_direction
+            + separation * FLOCK_SEPARATION_WEIGHT
+            + wander_direction * FLOCK_WANDER_WEIGHT)
+            .normalize_or_zero();
+        if flock_direction.length_squared() > 0.0 {
+            velocity.x = flock_direction.x * ENEMY_SPEED;
+            velocity.y = flock_direction.y * ENEMY_SPEED;
+            transform.translation.x += velocity.x * delta;
+            transform.translation.y += velocity.y * delta;
         }
     }
 }
@@ -450,9 +461,15 @@ fn crystal_pickup(
     for (entity, crystal_transform) in &crystals {
         if player_pos.distance(crystal_transform.translation.truncate()) < PICKUP_RADIUS + 12.0 {
             session.score += 10;
+            commands_play_sound(&mut commands, &assets.pickup);
             commands.entity(entity).despawn();
             let mut rng = rand::rng();
-            spawn_crystal(&mut commands, &assets, rng.random_range(-300.0..=300.0), rng.random_range(-160.0..=160.0));
+            spawn_crystal(
+                &mut commands,
+                &assets,
+                rng.random_range(-300.0..=300.0),
+                rng.random_range(-160.0..=160.0),
+            );
         }
     }
 }
@@ -462,9 +479,8 @@ fn enemy_damage(
     mut commands: Commands,
     assets: Res<GameAssets>,
     player_query: Query<&Transform, With<Player>>,
-    enemy_query: Query<(Entity, &Transform), With<Enemy>>,
+    enemy_query: EnemyTransforms,
     mut session: ResMut<GameSession>,
-    audio: Res<Audio>,
     mut next_state: ResMut<NextState<GameState>>,
 ) {
     if *state.get() != GameState::Playing {
@@ -474,9 +490,13 @@ fn enemy_damage(
         return;
     };
     for (entity, enemy_transform) in &enemy_query {
-        if player_transform.translation.distance(enemy_transform.translation) < 26.0 {
+        if player_transform
+            .translation
+            .distance(enemy_transform.translation)
+            < 26.0
+        {
             session.health -= 1;
-            commands_play_sound(&audio, &assets.hit);
+            commands_play_sound(&mut commands, &assets.hit);
             commands.entity(entity).despawn();
             let mut rng = rand::rng();
             let new_x = rng.random_range(-300.0..=300.0);
@@ -504,53 +524,46 @@ fn spawn_wave(
     let desired_count = (session.wave as usize).min(8) + 2;
     if enemy_query.iter().count() < desired_count && session.last_enemy_spawn > 2.5 {
         let mut rng = rand::rng();
-        spawn_enemy(&mut commands, &assets, rng.random_range(-300.0..=300.0), rng.random_range(-160.0..=160.0));
+        spawn_enemy(
+            &mut commands,
+            &assets,
+            rng.random_range(-300.0..=300.0),
+            rng.random_range(-160.0..=160.0),
+        );
         session.wave += 1;
         session.last_enemy_spawn = 0.0;
     }
 }
 
-fn keep_in_bounds(
-    mut query: Query<&mut Transform, Or<(With<Player>, With<Enemy>)>>,
-) {
+fn keep_in_bounds(mut query: BoundedTransforms) {
     for mut transform in &mut query {
         transform.translation.x = transform.translation.x.clamp(-HALF_WIDTH, HALF_WIDTH);
         transform.translation.y = transform.translation.y.clamp(-HALF_HEIGHT, HALF_HEIGHT);
     }
 }
 
-fn commands_play_sound(audio: &Res<Audio>, handle: &Handle<AudioSource>) {
-    audio.play(handle.clone());
+fn commands_play_sound(commands: &mut Commands, handle: &Handle<AudioSource>) {
+    commands.spawn((AudioPlayer(handle.clone()), PlaybackSettings::DESPAWN));
 }
 
 fn update_hud(
     state: Res<State<GameState>>,
     session: Res<GameSession>,
-    settings: Res<Settings>,
     mut score_query: Query<&mut Text, With<ScoreText>>,
-    mut state_query: Query<&mut Text, With<StateText>>,
+    mut state_query: Query<&mut Text, (With<StateText>, Without<ScoreText>)>,
 ) {
-    let score_text = match settings.language {
-        Language::Zh => format!("分数: {}  生命: {}  波次: {}", session.score, session.health, session.wave),
-        Language::En => format!("Score: {}  HP: {}  Wave: {}", session.score, session.health, session.wave),
-    };
+    let score_text = format!(
+        "Score: {}  HP: {}  Wave: {}",
+        session.score, session.health, session.wave
+    );
     if let Ok(mut text) = score_query.single_mut() {
         text.0 = score_text;
     }
 
     let status = match *state.get() {
-        GameState::Menu => match settings.language {
-            Language::Zh => "菜单：按 Enter 开始，L 切换语言",
-            Language::En => "Menu: Press Enter to start, L to toggle language",
-        },
-        GameState::Playing => match settings.language {
-            Language::Zh => "正在游戏：用 WASD 移动，收集水晶，避开敌人",
-            Language::En => "Playing: WASD to move, collect crystals, avoid enemies",
-        },
-        GameState::GameOver => match settings.language {
-            Language::Zh => "失败：按 Enter 重新开始，Esc 回菜单",
-            Language::En => "Game over: Press Enter to restart, Esc to menu",
-        },
+        GameState::Menu => "Menu: Press Enter to start",
+        GameState::Playing => "Playing: WASD to move, collect crystals, avoid enemies",
+        GameState::GameOver => "Game over: Press Enter to restart, Esc to menu",
     };
     if let Ok(mut text) = state_query.single_mut() {
         text.0 = status.to_string();

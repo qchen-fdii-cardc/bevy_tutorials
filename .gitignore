@@ -2,3 +2,4 @@ target/
 .venv/
 docs/_build/
 .venv/
+assets/generated/
