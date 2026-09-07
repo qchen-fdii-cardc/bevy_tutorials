@@ -41,10 +41,10 @@ stages/stage-05-content-presentation/README
 24-save-settings-release/README
 stages/stage-06-vertical-slice/README
 capstone
-contributing
 ```
 
-## 课程章节
+```{rubric} 课程章节
+```
 
 <div class="chapter-link-grid">
 	<div class="chapter-link-row">
@@ -209,7 +209,8 @@ contributing
 	</div>
 </div>
 
-## 当前基线
+```{rubric} 当前基线
+```
 
 - Rust stable 与 Cargo
 - Bevy `0.19.1`
