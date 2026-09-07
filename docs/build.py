@@ -76,6 +76,10 @@ def build_html() -> None:
 
 
 def build_pdf() -> None:
+    latex_directory = DOCS_ROOT / "_build" / "latex"
+    if latex_directory.exists():
+        shutil.rmtree(latex_directory)
+
     subprocess.run(
         [
             sys.executable,
@@ -85,11 +89,10 @@ def build_pdf() -> None:
             "-b",
             "latex",
             str(DOCS_ROOT),
-            str(DOCS_ROOT / "_build" / "latex"),
+            str(latex_directory),
         ],
         check=True,
     )
-    latex_directory = DOCS_ROOT / "_build" / "latex"
     subprocess.run(
         [
             "latexmk",

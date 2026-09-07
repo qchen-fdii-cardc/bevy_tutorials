@@ -4,7 +4,29 @@
 
 ## 项目与源码
 
-<a href="https://github.com/qchen-fdii-cardc/bevy_tutorials">GitHub 仓库</a> · <a href="capstone/Cargo.toml">查看 <code>Cargo.toml</code></a> · <a href="capstone/src/main.rs">查看 <code>src/main.rs</code></a> · <a href="capstone/README.md">查看项目说明</a>
+[GitHub 仓库](https://github.com/qchen-fdii-cardc/bevy_tutorials) · [在线文档](https://www.windtunnel.cn/bevy_tutorials/)
+
+<details>
+<summary>展开查看 <code>Cargo.toml</code></summary>
+
+```{literalinclude} ../Cargo.toml
+:language: toml
+:caption: Cargo.toml
+:linenos:
+```
+</details>
+
+<details>
+<summary>展开查看 <code>src/main.rs</code></summary>
+
+```{literalinclude} ../src/main.rs
+:language: rust
+:caption: src/main.rs
+:linenos:
+```
+</details>
+
+
 
 根目录的 Cargo 项目是路线图的最终宿主。章节和阶段实验留在 `docs/`，这里只接收已经能够独立解释、测试和运行的机制。
 
@@ -62,15 +84,13 @@ cargo test
 
 核心状态拆成 Resource 和 Component：
 
-| 类型 | 角色 |
-| --- | --- |
-| `GameSession` | 分数、生命值、波次和计时器等共享会话状态 |
-| `Settings` | 音量设置等持久化配置 |
-| `GameAssets` | 图片和音效的资源句柄 |
-| `Player`、`Enemy`、`Crystal` | 实体分类标记 |
-| `Velocity` | 移动速度事实 |
-| `Collider` | 可参与碰撞规则的标记 |
-| `FlockWander` | 敌人独立的随机游走相位和转向速率 |
+- `GameSession`：分数、生命值、波次和计时器等共享会话状态。
+- `Settings`：音量设置等持久化配置。
+- `GameAssets`：图片和音效的资源句柄。
+- `Player`、`Enemy`、`Crystal`：实体分类标记。
+- `Velocity`：移动速度事实。
+- `Collider`：可参与碰撞规则的标记。
+- `FlockWander`：敌人独立的随机游走相位和转向速率。
 
 `Entity` 只提供身份，规则通过 Query 选择需要的事实。玩家、敌人和晶体没有被塞进一个万能对象；这使移动、拾取、伤害和表现可以分别测试和替换。
 
@@ -104,18 +124,47 @@ HUD 使用 Bevy UI 的 `Node` 和 `Text` Component。`update_hud` 从 `GameSessi
 
 这个页面不是一份孤立的成品说明。每个实现选择都可以沿路线回溯到更小的实验：
 
-| 本项目机制 | 对应章节 | 对应阶段实践 |
-| --- | --- | --- |
-| `App`、`Startup`、`Update`、插件与 Resource | <a href="00-app-runtime/README.html">教程 00：App 运行时</a> 与 <a href="01-plugins-resources-systems/README.html">教程 01：插件、资源与系统</a> | <a href="stages/stage-00-observability/README.html">阶段 0：可观测运行时</a> |
-| 日志、Gizmos、实体计数和最小复现 | <a href="02-debug-visualization/README.html">教程 02：调试可视化</a> | <a href="stages/stage-00-observability/README.html">阶段 0：可观测运行时</a> |
-| Entity、Component、Resource、组合查询 | <a href="03-ecs-data-model/README.html">教程 03：ECS 数据模型</a> | <a href="stages/stage-01-spore-swarm/README.html">阶段 1：孢子群</a> |
-| `Query` 过滤、`Without`、`ParamSet` 和读写边界 | <a href="04-query-access-conflicts/README.html">教程 04：Query 访问冲突</a> | <a href="stages/stage-01-spore-swarm/README.html">阶段 1：孢子群</a> |
-| `Commands`、实体生命周期和重开 | <a href="05-commands-lifecycle/README.html">教程 05：Commands 与生命周期</a> | <a href="stages/stage-01-spore-swarm/README.html">阶段 1：孢子群</a> |
-| `FixedUpdate`、输入意图与暂停边界 | <a href="07-fixed-update/README.html">教程 07：Fixed Update 与时间步</a> | <a href="stages/stage-02-topdown-controller/README.html">阶段 2：俯视角控制器</a> |
-| 2D 坐标、相机跟随、精灵与 UI | <a href="10-2d-coordinates/README.html">教程 10：2D 坐标系</a>、<a href="11-camera-follow/README.html">教程 11：相机跟随</a> 与 <a href="13-ui-world-space/README.html">教程 13：UI 与世界空间</a> | <a href="stages/stage-03-tactical-map/README.html">阶段 3：战术地图</a> |
-| 碰撞、伤害、事件驱动规则链 | <a href="14-collision-minimum-model/README.html">教程 14：碰撞最小模型</a>、<a href="15-event-driven-damage/README.html">教程 15：事件驱动伤害</a> 与 <a href="16-rule-chain-composition/README.html">教程 16：规则链组成</a> | <a href="stages/stage-04-arena-survival/README.html">阶段 4：Arena 生存</a> |
-| 资产、动画、音频、UI 与配置 | <a href="17-asset-server/README.html">教程 17：Asset Server</a>、<a href="18-animation-state/README.html">教程 18：动画状态</a>、<a href="19-audio-ui-feedback/README.html">教程 19：音频与 UI 反馈</a> 与 <a href="20-localization-config/README.html">教程 20：本地化与配置</a> | <a href="stages/stage-05-content-presentation/README.html">阶段 5：内容表现</a> |
-| 插件化、测试、性能和发布 | <a href="21-plugin-project-structure/README.html">教程 21：插件项目结构</a>、<a href="22-testing-ecs-logic/README.html">教程 22：测试 ECS 逻辑</a>、<a href="23-performance-profiling/README.html">教程 23：性能剖析</a> 与 <a href="24-save-settings-release/README.html">教程 24：存档设置发布</a> | <a href="stages/stage-06-vertical-slice/README.html">阶段 6：垂直切片</a> |
+### 阶段 0：运行时与可观测性
+
+- 机制：`App`、`Startup`、`Update`、插件、Resource、日志与 Gizmos。
+- 章节：{doc}`教程 00：App 运行时 <00-app-runtime/README>`、{doc}`教程 01：插件、资源与系统 <01-plugins-resources-systems/README>`、{doc}`教程 02：调试可视化 <02-debug-visualization/README>`。
+- 阶段实践：{doc}`阶段 0：可观测运行时 <stages/stage-00-observability/README>`。
+
+### 阶段 1：ECS、查询与生命周期
+
+- 机制：Entity、Component、Resource、组合查询、`Query` 过滤、`Without`、`ParamSet`、`Commands` 与重开。
+- 章节：{doc}`教程 03：ECS 数据模型 <03-ecs-data-model/README>`、{doc}`教程 04：Query 访问冲突 <04-query-access-conflicts/README>`、{doc}`教程 05：Commands 与生命周期 <05-commands-lifecycle/README>`。
+- 阶段实践：{doc}`阶段 1：孢子群 <stages/stage-01-spore-swarm/README>`。
+
+### 阶段 2：时间与输入
+
+- 机制：`FixedUpdate`、输入意图、状态切换与暂停边界。
+- 章节：{doc}`教程 07：Fixed Update 与时间步 <07-fixed-update/README>`、{doc}`教程 08：输入映射 <08-input-mapping/README>`、{doc}`教程 09：State 与 Run Condition <09-state-run-conditions/README>`。
+- 阶段实践：{doc}`阶段 2：俯视角控制器 <stages/stage-02-topdown-controller/README>`。
+
+### 阶段 3：2D 空间与渲染
+
+- 机制：2D 坐标、相机跟随、精灵、图层、Z 顺序与 UI 世界空间。
+- 章节：{doc}`教程 10：2D 坐标系 <10-2d-coordinates/README>`、{doc}`教程 11：相机跟随 <11-camera-follow/README>`、{doc}`教程 12：精灵、图层与 Z <12-sprites-layers-z/README>`、{doc}`教程 13：UI 与世界空间 <13-ui-world-space/README>`。
+- 阶段实践：{doc}`阶段 3：战术地图 <stages/stage-03-tactical-map/README>`。
+
+### 阶段 4：规则与交互
+
+- 机制：碰撞、伤害、事件驱动规则链与可测试的死亡逻辑。
+- 章节：{doc}`教程 14：碰撞最小模型 <14-collision-minimum-model/README>`、{doc}`教程 15：事件驱动伤害 <15-event-driven-damage/README>`、{doc}`教程 16：规则链组成 <16-rule-chain-composition/README>`。
+- 阶段实践：{doc}`阶段 4：Arena 生存 <stages/stage-04-arena-survival/README>`。
+
+### 阶段 5：内容与表现
+
+- 机制：资产、动画、音频、UI 反馈与配置。
+- 章节：{doc}`教程 17：Asset Server <17-asset-server/README>`、{doc}`教程 18：动画状态 <18-animation-state/README>`、{doc}`教程 19：音频与 UI 反馈 <19-audio-ui-feedback/README>`、{doc}`教程 20：本地化与配置 <20-localization-config/README>`。
+- 阶段实践：{doc}`阶段 5：内容表现 <stages/stage-05-content-presentation/README>`。
+
+### 阶段 6：工程化与发布
+
+- 机制：插件化、测试、性能剖析、存档、设置与发布。
+- 章节：{doc}`教程 21：插件项目结构 <21-plugin-project-structure/README>`、{doc}`教程 22：测试 ECS 逻辑 <22-testing-ecs-logic/README>`、{doc}`教程 23：性能剖析 <23-performance-profiling/README>`、{doc}`教程 24：存档设置发布 <24-save-settings-release/README>`。
+- 阶段实践：{doc}`阶段 6：垂直切片 <stages/stage-06-vertical-slice/README>`。
 
 推荐的阅读顺序是：先读一个章节的 Bevy 说明，再读同页嵌入的 `Rust in Bevy` 内容，运行章节实验，最后观察该机制在本项目中的组合位置。这样可以区分「引擎接口事实」「Rust 语言约束」和「本项目的架构选择」。
 

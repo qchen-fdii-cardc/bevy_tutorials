@@ -3,3 +3,6 @@ target/
 docs/_build/
 .venv/
 assets/generated/
+
+
+*.log

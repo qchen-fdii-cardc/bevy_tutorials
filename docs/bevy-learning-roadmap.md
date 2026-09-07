@@ -43,10 +43,10 @@ cargo run
 
 **目标：** 启动窗口、理解 `App`、插件和基本 Schedule，并学会从日志、Gizmos、实体检查中确认引擎到底做了什么。
 
-- [文章 00：《Bevy 不是引擎黑箱：一个 `App` 如何开始运行》](00-app-runtime/README.html)
-- [文章 01：《插件、资源与系统：先把运行时的骨架搭出来》](01-plugins-resources-systems/README.html)
-- [文章 02：《调试可视化：日志、Gizmos 与最小复现》](02-debug-visualization/README.html)
-- [阶段实验 00：可观测的运行时](stages/stage-00-observability/README.html)
+- {doc}`文章 00：《Bevy 不是引擎黑箱：一个 App 如何开始运行》 <00-app-runtime/README>`
+- {doc}`文章 01：《插件、资源与系统：先把运行时的骨架搭出来》 <01-plugins-resources-systems/README>`
+- {doc}`文章 02：《调试可视化：日志、Gizmos 与最小复现》 <02-debug-visualization/README>`
+- {doc}`阶段实验 00：可观测的运行时 <stages/stage-00-observability/README>`
 
 **实验交付：** 一个可切换调试覆盖层的窗口：显示帧时间、实体计数，以及一条由 Gizmos 绘制的坐标轴。
 
@@ -69,11 +69,11 @@ cargo run
 
 **目标：** 用组件组合建模，而不把所有状态塞进万能 `Player` 结构体或继承树。
 
-- [文章 03：《实体没有行为：ECS 中的身份、事实与规则》](03-ecs-data-model/README.html)
-- [文章 04：《`Query` 的读取、写入与冲突：借用检查器在保护什么》](04-query-access-conflicts/README.html)
-- [文章 05：《`Commands`、延迟命令与生命周期：实体何时真正出生和消失》](05-commands-lifecycle/README.html)
-- [文章 06：《事件与变更检测：别每帧轮询整个宇宙》](06-events-change-detection/README.html)
-- [阶段实验 01：孢子群](stages/stage-01-spore-swarm/README.html)
+- {doc}`文章 03：《实体没有行为：ECS 中的身份、事实与规则》 <03-ecs-data-model/README>`
+- {doc}`文章 04：《Query 的读取、写入与冲突：借用检查器在保护什么》 <04-query-access-conflicts/README>`
+- {doc}`文章 05：《Commands、延迟命令与生命周期：实体何时真正出生和消失》 <05-commands-lifecycle/README>`
+- {doc}`文章 06：《事件与变更检测：别每帧轮询整个宇宙》 <06-events-change-detection/README>`
+- {doc}`阶段实验 01：孢子群 <stages/stage-01-spore-swarm/README>`
 
 **实验交付：** 一个「孢子群」模拟：实体按 `Velocity` 移动，生命周期耗尽后销毁，碰撞事件生成新实体。要求拆分移动、衰减、生成和清理系统。
 
@@ -83,10 +83,10 @@ cargo run
 
 **目标：** 将输入采样与确定性的游戏模拟分开，理解帧时间、固定时间步和暂停。
 
-- [文章 07：《`Update` 与 `FixedUpdate`：帧率不是游戏规则》](07-fixed-update/README.html)
-- [文章 08：《输入映射：从键盘按键到可测试的意图》](08-input-mapping/README.html)
-- [文章 09：《状态机与 Run Conditions：菜单、游戏和暂停如何隔离》](09-state-run-conditions/README.html)
-- [阶段实验 02：俯视角控制器](stages/stage-02-topdown-controller/README.html)
+- {doc}`文章 07：《Update 与 FixedUpdate：帧率不是游戏规则》 <07-fixed-update/README>`
+- {doc}`文章 08：《输入映射：从键盘按键到可测试的意图》 <08-input-mapping/README>`
+- {doc}`文章 09：《状态机与 Run Conditions：菜单、游戏和暂停如何隔离》 <09-state-run-conditions/README>`
+- {doc}`阶段实验 02：俯视角控制器 <stages/stage-02-topdown-controller/README>`
 
 **实验交付：** 一个俯视角角色控制器：输入生成移动意图，固定时间步更新位置，`GameState` 可切换菜单、游戏、暂停。
 
@@ -96,11 +96,11 @@ cargo run
 
 **目标：** 看懂坐标系和渲染分层，掌握当前项目已涉及的相机、`Viewport` 与屏幕坐标转换。
 
-- [文章 10：《2D 坐标系：窗口像素、Viewport 与世界位置》](10-2d-coordinates/README.html)
-- [文章 11：《相机跟随、缩放与边界：看见的世界由谁决定》](11-camera-follow/README.html)
-- [文章 12：《精灵、纹理、图层与 Z 顺序：渲染不是碰运气》](12-sprites-layers-z/README.html)
-- [文章 13：《UI 与世界空间：两套坐标系，两个问题域》](13-ui-world-space/README.html)
-- [阶段实验 03：战术地图](stages/stage-03-tactical-map/README.html)
+- {doc}`文章 10：《2D 坐标系：窗口像素、Viewport 与世界位置》 <10-2d-coordinates/README>`
+- {doc}`文章 11：《相机跟随、缩放与边界：看见的世界由谁决定》 <11-camera-follow/README>`
+- {doc}`文章 12：《精灵、纹理、图层与 Z 顺序：渲染不是碰运气》 <12-sprites-layers-z/README>`
+- {doc}`文章 13：《UI 与世界空间：两套坐标系，两个问题域》 <13-ui-world-space/README>`
+- {doc}`阶段实验 03：战术地图 <stages/stage-03-tactical-map/README>`
 
 **实验交付：** 一张可缩放、可拖拽的战术地图。鼠标位置要从窗口空间转换至世界空间，并用 Gizmos 同时标记原始点击和回算位置。
 
@@ -110,10 +110,10 @@ cargo run
 
 **目标：** 用明确的状态和事件实现可测试的规则，避免用渲染对象偷偷承载玩法状态。
 
-- [文章 14：《碰撞检测的最小模型：AABB、空间划分与误差边界》](14-collision-minimum-model/README.html)
-- [文章 15：《事件驱动的伤害、拾取与死亡》](15-event-driven-damage/README.html)
-- [文章 16：《从一次攻击到一条规则链：组合系统而非巨型 `match`》](16-rule-chain-composition/README.html)
-- [阶段实验 04：Arena 生存](stages/stage-04-arena-survival/README.html)
+- {doc}`文章 14：《碰撞检测的最小模型：AABB、空间划分与误差边界》 <14-collision-minimum-model/README>`
+- {doc}`文章 15：《事件驱动的伤害、拾取与死亡》 <15-event-driven-damage/README>`
+- {doc}`文章 16：《从一次攻击到一条规则链：组合系统与规则链》 <16-rule-chain-composition/README>`
+- {doc}`阶段实验 04：Arena 生存 <stages/stage-04-arena-survival/README>`
 
 **实验交付：** 一个 Arena 生存原型：玩家移动、敌人追踪、投射物、碰撞伤害、掉落物与波次生成。
 
@@ -123,11 +123,11 @@ cargo run
 
 **目标：** 理解资产异步加载、动画、声音和 UI 的生命周期，把「能玩」推进到「玩家能读懂」。
 
-- [文章 17：《Asset Server：资源句柄、加载状态与热重载》](17-asset-server/README.html)
-- [文章 18：《2D 动画状态：帧序列、状态转换与视觉反馈》](18-animation-state/README.html)
-- [文章 19：《音效与 UI：反馈信息如何进入玩家感知》](19-audio-ui-feedback/README.html)
-- [文章 20：《本地化与配置：把文本和数值从代码里释放出来》](20-localization-config/README.html)
-- [阶段实验 05：内容呈现](stages/stage-05-content-presentation/README.html)
+- {doc}`文章 17：《Asset Server：资源句柄、加载状态与热重载》 <17-asset-server/README>`
+- {doc}`文章 18：《2D 动画状态：帧序列、状态转换与视觉反馈》 <18-animation-state/README>`
+- {doc}`文章 19：《音效与 UI：反馈信息如何进入玩家感知》 <19-audio-ui-feedback/README>`
+- {doc}`文章 20：《本地化与配置：把文本和数值从代码里释放出来》 <20-localization-config/README>`
+- {doc}`阶段实验 05：内容呈现 <stages/stage-05-content-presentation/README>`
 
 **实验交付：** 为 Arena 原型添加加载界面、血条、命中反馈、音效、设置页和可编辑的平衡参数。
 
@@ -137,11 +137,11 @@ cargo run
 
 **目标：** 将一次性演示变成可维护的软件，学会测量性能、拆分插件、保存状态，并针对目标平台打包。
 
-- [文章 21：《插件化项目结构：按功能切分，不按文件扩散》](21-plugin-project-structure/README.html)
-- [文章 22：《测试 ECS 逻辑：世界、资源、事件与确定性》](22-testing-ecs-logic/README.html)
-- [文章 23：《性能剖析：先测量，再谈优化》](23-performance-profiling/README.html)
-- [文章 24：《存档、设置与发布构建》](24-save-settings-release/README.html)
-- [阶段实验 06：垂直切片](stages/stage-06-vertical-slice/README.html)
+- {doc}`文章 21：《插件化项目结构：按功能切分，不按文件扩散》 <21-plugin-project-structure/README>`
+- {doc}`文章 22：《测试 ECS 逻辑：世界、资源、事件与确定性》 <22-testing-ecs-logic/README>`
+- {doc}`文章 23：《性能剖析：先测量，再谈优化》 <23-performance-profiling/README>`
+- {doc}`文章 24：《存档、设置与发布构建》 <24-save-settings-release/README>`
+- {doc}`阶段实验 06：垂直切片 <stages/stage-06-vertical-slice/README>`
 
 **实验交付：** 完成一个可发布的 2D 垂直切片：主菜单、核心循环、暂停、存档、音频设置、失败重开和发布说明。
 

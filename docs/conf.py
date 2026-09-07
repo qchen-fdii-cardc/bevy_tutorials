@@ -43,5 +43,9 @@ latex_elements = {
 \usepackage{xeCJK}
 \setmainfont{TeX Gyre Termes}
 \setCJKmainfont{Microsoft YaHei}
+\setlength{\headheight}{14pt}
+\raggedbottom
+\vbadness=10000
+\vfuzz=3pt
 """,
 }
