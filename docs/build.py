@@ -3,6 +3,7 @@ from __future__ import annotations
 import shutil
 import subprocess
 import sys
+import argparse
 from pathlib import Path
 
 
@@ -47,7 +48,7 @@ def copy_cargo_project(source: Path, destination: Path) -> None:
     shutil.copytree(source / "src", destination / "src", dirs_exist_ok=True)
 
 
-def main() -> None:
+def build_html() -> None:
     subprocess.run(
         [
             sys.executable,
@@ -72,6 +73,50 @@ def main() -> None:
                                "stages" / stage_source.name)
 
     copy_cargo_project(CAPSTONE_ROOT, OUTPUT_ROOT / "capstone")
+
+
+def build_pdf() -> None:
+    subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "sphinx.cmd.build",
+            "--fail-on-warning",
+            "-b",
+            "latex",
+            str(DOCS_ROOT),
+            str(DOCS_ROOT / "_build" / "latex"),
+        ],
+        check=True,
+    )
+    latex_directory = DOCS_ROOT / "_build" / "latex"
+    subprocess.run(
+        [
+            "latexmk",
+            "-xelatex",
+            "-interaction=nonstopmode",
+            "-halt-on-error",
+            "bevy.tex",
+        ],
+        cwd=latex_directory,
+        check=True,
+    )
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(
+        description="构建 Bevy 学习路线文档站，或生成中文 PDF。"
+    )
+    parser.add_argument(
+        "--pdf",
+        action="store_true",
+        help="使用 XeLaTeX 生成单个中文 PDF；默认只构建 HTML。",
+    )
+    args = parser.parse_args()
+
+    build_html()
+    if args.pdf:
+        build_pdf()
 
 
 if __name__ == "__main__":
